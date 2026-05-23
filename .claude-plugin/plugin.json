@@ -1,0 +1,17 @@
+{
+  "name": "mart-forge",
+  "version": "3.0.0",
+  "description": "Kimball DWH scaffolding and review framework with lifecycle gates",
+  "skills": [
+    "skills/using-mart-forge",
+    "skills/mart-brd",
+    "skills/mart-tdd",
+    "skills/mart-bootstrap",
+    "skills/mart-dqc",
+    "skills/dqc-audit",
+    "skills/schema-evolve",
+    "skills/mart-review",
+    "skills/source-discovery"
+  ],
+  "hooks": "hooks/hooks.json"
+}

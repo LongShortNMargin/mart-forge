@@ -1,0 +1,42 @@
+name: "{Mart Name} Daily Pipeline"
+
+on:
+  schedule:
+    - cron: "{cron_expression}"  # From mart.yml schedule.cron
+  workflow_dispatch: {}
+
+env:
+  DBT_PROFILES_DIR: "."
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # From mart.yml pipeline.timeout_minutes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install dbt-core dbt-duckdb
+
+      - name: Seed dimensions
+        run: dbt seed --profiles-dir . --target ci
+
+      - name: Run models
+        run: dbt run --profiles-dir . --target ci
+
+      - name: Run tests
+        run: dbt test --profiles-dir . --target ci
+
+      - name: Update DQC scorecard
+        run: python scripts/dqc_update.py
+
+      - name: Upload scorecard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dqc-scorecard
+          path: dqc_scorecard.json

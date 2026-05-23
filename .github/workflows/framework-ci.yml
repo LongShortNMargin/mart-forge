@@ -177,11 +177,11 @@ jobs:
           not_applicable rationale: No ratio metrics needed. All aggregations are count/sum in T-9.
 
           ## T-11. Presentation Table Design (ADS)
-          | column_name | data_type | definition | example_value | calculation | data_source | BRD_ref |
-          |-------------|-----------|------------|---------------|-------------|-------------|---------|
-          | calendar_date | DATE | Date | 2020-01-01 | dim join | dim_date | - |
-          | order_count | BIGINT | Orders | 3 | dws join | DWS | M-1 |
-          | daily_revenue | DECIMAL | Revenue | 325.75 | dws join | DWS | M-2 |
+          | column_name | data_type | definition | example_value | calculation | data_source | BRD_ref | link_status |
+          |-------------|-----------|------------|---------------|-------------|-------------|---------|-------------|
+          | calendar_date | DATE | Date | 2020-01-01 | dim join | dim_date | - | exact |
+          | order_count | BIGINT | Orders | 3 | dws join | DWS | M-2 | proxy |
+          | daily_revenue | DECIMAL | Revenue | 325.75 | dws join | DWS | M-1 | exact |
 
           ## T-12. Physical Design
           Specs in T-6 through T-11.
@@ -238,13 +238,17 @@ jobs:
           cat /tmp/ci-mart/dbt_project.yml
           echo "=== DQC scorecard ==="
           cat /tmp/ci-mart/dqc_scorecard.json
+          echo "=== mart.yml contract ==="
+          cat /tmp/ci-mart/mart.yml
           echo "=== Dashboard smoke check ==="
           python -c "
-          import sys
-          sys.path.insert(0, '/tmp/ci-mart/dashboard')
+          import yaml
+          contract = yaml.safe_load(open('/tmp/ci-mart/mart.yml'))
+          assert contract['dashboard']['ads_table'] == 'ci_ads_exec_dashboard', 'Wrong ADS table'
+          assert len(contract['metrics']) >= 2, 'Insufficient metrics in contract'
           content = open('/tmp/ci-mart/dashboard/app.py').read()
           assert 'get_connection' in content, 'Missing DB connection'
           assert 'load_ads_data' in content, 'Missing ADS query'
-          assert 'ci_ads_exec_dashboard' in content, 'Missing ADS table ref'
-          print('Dashboard smoke check PASSED')
+          assert 'mart.yml' in content, 'Dashboard not contract-driven'
+          print('Contract + Dashboard smoke check PASSED')
           "

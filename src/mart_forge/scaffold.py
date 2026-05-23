@@ -8,6 +8,9 @@ Enforces structural contract validation:
 - No unverified link_status at sign-off
 - Each metric must declare valid source_type and resolved link_status
 - Bare heading vocabulary and bare N/A tokens rejected
+- ODS (T-6) and ADS (T-11) cannot be not_applicable
+- Cross-validates BRD metric-to-ADS traceability
+- Generates machine-readable implementation contract (mart.yml) from signed BRD/TDD
 - Produces a complete, runnable dbt project with SQL models, DQC assets, and dashboard
 """
 
@@ -16,6 +19,8 @@ import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+
+import yaml
 
 from mart_forge._resources import get_resource_root
 
@@ -46,6 +51,10 @@ TABLE_SECTIONS = {
     "T-10": {"label": "DWS-Perf", "extra": []},
     "T-11": {"label": "ADS", "extra": ["BRD"]},
 }
+
+MANDATORY_LAYERS = {"T-6": "ODS", "T-11": "ADS"}
+
+LAYER_TO_SECTION = {"ods": "T-6", "dim": "T-7", "dwd": "T-8", "dws": "T-9", "ads": "T-11"}
 
 
 def _sanitize_name(name: str) -> str:
@@ -90,6 +99,96 @@ def _section_has_content(section_text: str, heading: str) -> bool:
     return len(content_lines) >= 1
 
 
+def _has_populated_column_spec(section_text: str) -> bool:
+    """Check if section has a column spec table with at least one data row."""
+    lines = section_text.splitlines()
+    found_header = False
+    found_separator = False
+    data_rows = 0
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            if found_separator:
+                break
+            continue
+        if not found_header:
+            if "column_name" in stripped.lower():
+                found_header = True
+            continue
+        if not found_separator:
+            if re.match(r"^\s*\|[\s\-|]+\|\s*$", stripped):
+                found_separator = True
+            continue
+        cells = [c.strip() for c in stripped.split("|")[1:-1]]
+        if cells and cells[0]:
+            data_rows += 1
+    return data_rows > 0
+
+
+def _extract_metrics(brd_content: str) -> list[dict]:
+    """Extract metrics from BRD B-3 metric catalog."""
+    b3_text = _extract_section(brd_content, "B-3", "B-4")
+    metrics = []
+    for line in b3_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or re.match(r"^\s*\|[\s\-|]+\|\s*$", stripped):
+            continue
+        cells = [c.strip() for c in stripped.split("|")[1:-1]]
+        if len(cells) < 4:
+            continue
+        metric_cell = cells[0]
+        if "metric" in metric_cell.lower() and len(cells) > 1 and "source" in cells[1].lower():
+            continue
+        match = re.match(r"(M-\d+)\s+(.*)", metric_cell)
+        if match:
+            metrics.append({
+                "id": match.group(1),
+                "name": match.group(2).strip(),
+                "source_type": cells[1].strip(),
+                "link_status": cells[2].strip(),
+                "definition": cells[3].strip() if len(cells) > 3 else "",
+            })
+    return metrics
+
+
+def _extract_ads_columns(tdd_content: str) -> list[dict]:
+    """Extract ADS column-to-metric mapping from TDD T-11."""
+    t11_text = _extract_section(tdd_content, "T-11", "T-12")
+    columns = []
+    for line in t11_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or re.match(r"^\s*\|[\s\-|]+\|\s*$", stripped):
+            continue
+        cells = [c.strip() for c in stripped.split("|")[1:-1]]
+        if len(cells) < 6:
+            continue
+        if "column_name" in cells[0].lower():
+            continue
+        brd_ref = cells[6].strip() if len(cells) > 6 else "-"
+        link_status = cells[7].strip() if len(cells) > 7 else ""
+        columns.append({
+            "column_name": cells[0],
+            "data_type": cells[1] if len(cells) > 1 else "",
+            "brd_ref": brd_ref,
+            "link_status": link_status,
+        })
+    return columns
+
+
+def _get_active_layers(tdd_content: str) -> dict[str, bool]:
+    """Determine which TDD table sections have populated column specs."""
+    result = {}
+    for section_label in TABLE_SECTIONS:
+        next_num = int(section_label.split("-")[1]) + 1
+        next_label = f"T-{next_num}"
+        section_text = _extract_section(tdd_content, section_label, next_label)
+        if section_text and "column_name" in section_text and _has_populated_column_spec(section_text):
+            result[section_label] = True
+        else:
+            result[section_label] = False
+    return result
+
+
 def _validate_brd(brd_path: Path) -> list[str]:
     errors = []
     if not brd_path.exists():
@@ -123,7 +222,6 @@ def _validate_brd(brd_path: Path) -> list[str]:
             and l.strip().startswith("|")
             and not re.match(r"^\s*\|[\s\-|]+\|\s*$", l)
         ]
-        header_keywords = {"metric", "source_type", "link_status", "definition"}
         data_rows = [
             r for r in table_rows
             if not all(kw in r.lower() for kw in {"metric"})
@@ -160,7 +258,8 @@ def _validate_tdd(tdd_path: Path) -> list[str]:
         if section not in content:
             errors.append(f"TDD missing mandatory section {section}.")
 
-    has_any_table = False
+    active_layers = {}
+
     for section_label, spec in TABLE_SECTIONS.items():
         next_num = int(section_label.split("-")[1]) + 1
         next_label = f"T-{next_num}"
@@ -168,55 +267,186 @@ def _validate_tdd(tdd_path: Path) -> list[str]:
 
         if not section_text:
             errors.append(f"TDD {section_label} ({spec['label']}) section not found.")
+            active_layers[section_label] = False
             continue
 
         has_column_spec = "column_name" in section_text
         has_na = "not_applicable" in section_text.lower()
 
         if not has_column_spec and has_na:
-            na_line_idx = None
-            lines = section_text.splitlines()
-            for idx, line in enumerate(lines):
-                if "not_applicable" in line.lower():
-                    na_line_idx = idx
-                    break
-            if na_line_idx is not None:
-                remaining = " ".join(lines[na_line_idx:]).strip()
-                remaining = remaining.replace("not_applicable", "").strip()
-                remaining = re.sub(r"[*_#|{}\-\s]", "", remaining)
-                if len(remaining) < 10:
-                    errors.append(
-                        f"TDD {section_label} ({spec['label']}) has bare not_applicable without rationale."
-                    )
-                    continue
+            if section_label in MANDATORY_LAYERS:
+                errors.append(
+                    f"TDD {section_label} ({MANDATORY_LAYERS[section_label]}) cannot be "
+                    f"not_applicable — every mart requires this layer."
+                )
+            else:
+                na_line_idx = None
+                lines = section_text.splitlines()
+                for idx, line in enumerate(lines):
+                    if "not_applicable" in line.lower():
+                        na_line_idx = idx
+                        break
+                if na_line_idx is not None:
+                    remaining = " ".join(lines[na_line_idx:]).strip()
+                    remaining = remaining.replace("not_applicable", "").strip()
+                    remaining = re.sub(r"[*_#|{}\-\s]", "", remaining)
+                    if len(remaining) < 10:
+                        errors.append(
+                            f"TDD {section_label} ({spec['label']}) has bare "
+                            f"not_applicable without rationale."
+                        )
+            active_layers[section_label] = False
             continue
 
         if not has_column_spec and not has_na:
-            errors.append(f"TDD {section_label} ({spec['label']}) missing column specification table.")
+            errors.append(
+                f"TDD {section_label} ({spec['label']}) missing column specification table."
+            )
+            active_layers[section_label] = False
             continue
 
-        has_any_table = True
+        if not _has_populated_column_spec(section_text):
+            errors.append(
+                f"TDD {section_label} ({spec['label']}) has column spec header but no data rows."
+            )
+            active_layers[section_label] = False
+            continue
+
+        active_layers[section_label] = True
+
         for field in COLUMN_SPEC_FIELDS:
             if field not in section_text:
-                errors.append(f"TDD {section_label} ({spec['label']}) missing column spec field: {field}")
+                errors.append(
+                    f"TDD {section_label} ({spec['label']}) missing column spec field: {field}"
+                )
 
         for extra in spec["extra"]:
             if extra.lower() not in section_text.lower():
-                errors.append(f"TDD {section_label} ({spec['label']}) missing required element: {extra}")
+                errors.append(
+                    f"TDD {section_label} ({spec['label']}) missing required element: {extra}"
+                )
 
-    if not has_any_table:
-        errors.append("TDD has no table sections with column specifications — at least one layer required.")
+    if not any(active_layers.get(l, False) for l in ("T-8", "T-9")):
+        errors.append(
+            "TDD requires at least one fact/aggregation layer (T-8 DWD or T-9 DWS)."
+        )
+
+    t3_text = _extract_section(content, "T-3", "T-4")
+    if t3_text:
+        t3_has_data = False
+        for line in t3_text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            if re.match(r"^\s*\|[\s\-|]+\|\s*$", stripped):
+                continue
+            cells = [c.strip() for c in stripped.split("|")[1:-1]]
+            if not cells:
+                continue
+            if "table name" in cells[0].lower() or cells[0].lower() == "table":
+                continue
+            t3_has_data = True
+            break
+        if not t3_has_data:
+            errors.append("TDD T-3 table summary has no table entries.")
 
     if "unverified" in content.lower():
-        errors.append("TDD contains 'unverified' — all verifications must be resolved before sign-off.")
+        errors.append(
+            "TDD contains 'unverified' — all verifications must be resolved before sign-off."
+        )
 
     return errors
+
+
+def _validate_contract_linkage(brd_path: Path, tdd_path: Path) -> list[str]:
+    """Cross-validate BRD metrics against TDD T-11 ADS traceability."""
+    errors = []
+    if not brd_path.exists() or not tdd_path.exists():
+        return errors
+    brd_content = brd_path.read_text()
+    tdd_content = tdd_path.read_text()
+    metrics = _extract_metrics(brd_content)
+    ads_columns = _extract_ads_columns(tdd_content)
+    if not metrics or not ads_columns:
+        return errors
+    metric_ids = {m["id"] for m in metrics}
+    metric_link = {m["id"]: m["link_status"] for m in metrics}
+    for col in ads_columns:
+        ref = col["brd_ref"]
+        if ref in ("-", ""):
+            continue
+        if ref not in metric_ids:
+            errors.append(
+                f"TDD T-11 column '{col['column_name']}' references {ref} "
+                f"which is not in BRD B-3 metric catalog."
+            )
+        elif col["link_status"] and col["link_status"] != metric_link.get(ref, ""):
+            errors.append(
+                f"TDD T-11 column '{col['column_name']}' has link_status "
+                f"'{col['link_status']}' but BRD metric {ref} declares "
+                f"link_status '{metric_link[ref]}'."
+            )
+    referenced = {col["brd_ref"] for col in ads_columns if col["brd_ref"] not in ("-", "")}
+    for m in metrics:
+        if m["id"] not in referenced:
+            errors.append(
+                f"BRD metric {m['id']} ({m['name']}) is not traced in TDD T-11."
+            )
+    return errors
+
+
+def _generate_contract(
+    mart_name: str, prefix: str, brd_content: str, tdd_content: str,
+) -> dict:
+    """Generate implementation contract from validated BRD/TDD."""
+    safe_name = _sanitize_name(mart_name)
+    metrics = _extract_metrics(brd_content)
+    active = _get_active_layers(tdd_content)
+    ads_columns = _extract_ads_columns(tdd_content)
+
+    for metric in metrics:
+        for col in ads_columns:
+            if col.get("brd_ref") == metric["id"]:
+                metric["ads_column"] = col["column_name"]
+                break
+
+    layer_map = {
+        "T-6": ("ods", MODEL_NAMES.get("ods")),
+        "T-7": ("dim", MODEL_NAMES.get("dim")),
+        "T-8": ("dwd", MODEL_NAMES.get("dwd")),
+        "T-9": ("dws_count", MODEL_NAMES.get("dws")),
+        "T-10": ("dws_perf", None),
+        "T-11": ("ads", MODEL_NAMES.get("ads")),
+    }
+    layers = {}
+    for section, (key, model_pat) in layer_map.items():
+        is_active = active.get(section, False)
+        entry = {"active": is_active}
+        if is_active and model_pat:
+            entry["model"] = model_pat.replace("{prefix}", prefix)
+        layers[key] = entry
+
+    return {
+        "mart": {
+            "name": mart_name,
+            "db_name": safe_name,
+            "prefix": prefix,
+            "version": "1.0",
+        },
+        "metrics": [{k: v for k, v in m.items()} for m in metrics],
+        "layers": layers,
+        "dashboard": {
+            "ads_table": MODEL_NAMES["ads"].replace("{prefix}", prefix),
+            "dws_table": MODEL_NAMES["dws"].replace("{prefix}", prefix),
+        },
+    }
 
 
 def _check_gates(mart_dir: Path) -> list[str]:
     errors = []
     errors.extend(_validate_brd(mart_dir / "brd.md"))
     errors.extend(_validate_tdd(mart_dir / "tdd.md"))
+    errors.extend(_validate_contract_linkage(mart_dir / "brd.md", mart_dir / "tdd.md"))
     return errors
 
 
@@ -232,6 +462,15 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     files_created = []
 
     safe_name = _sanitize_name(mart_name)
+
+    brd_content = (mart_dir / "brd.md").read_text()
+    tdd_content = (mart_dir / "tdd.md").read_text()
+    contract = _generate_contract(mart_name, prefix, brd_content, tdd_content)
+    contract_path = mart_dir / "mart.yml"
+    contract_path.write_text(yaml.dump(contract, default_flow_style=False, sort_keys=False))
+    files_created.append("mart.yml")
+
+    active = _get_active_layers(tdd_content)
 
     # dbt_project.yml
     dbt_project = mart_dir / "dbt_project.yml"
@@ -266,8 +505,11 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     )
     files_created.append("profiles.yml")
 
-    # Model SQL files — render templates with {prefix} substitution
+    # Model SQL files — only for active layers
     for layer, model_pattern in MODEL_NAMES.items():
+        section = LAYER_TO_SECTION.get(layer)
+        if section and not active.get(section, False):
+            continue
         layer_dir = mart_dir / "models" / layer
         layer_dir.mkdir(parents=True, exist_ok=True)
         template_sql = templates_dir / "models" / layer / "template.sql"
@@ -279,7 +521,7 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
             target_file.write_text(content)
             files_created.append(f"models/{layer}/{model_name}.sql")
 
-    # Seeds — both raw_sample_data and dim_date
+    # Seeds
     seeds_dir = mart_dir / "seeds"
     seeds_dir.mkdir(exist_ok=True)
     for seed_name in ["raw_sample_data.csv", "dim_date.csv"]:
@@ -308,88 +550,110 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     test_file.write_text(test_content)
     files_created.append(f"tests/test_{prefix}_ods_no_duplicate_keys.sql")
 
-    # schema.yml with all models and generic tests
-    schema = mart_dir / "models" / "schema.yml"
+    # schema.yml — conditional on active layers, uses data_tests
     dwd_model = MODEL_NAMES["dwd"].replace("{prefix}", prefix)
     dim_model = MODEL_NAMES["dim"].replace("{prefix}", prefix)
     dws_model = MODEL_NAMES["dws"].replace("{prefix}", prefix)
     ads_model = MODEL_NAMES["ads"].replace("{prefix}", prefix)
-    schema.write_text(
-        f"version: 2\n\n"
-        f"models:\n"
-        f"  - name: {ods_model}\n"
-        f"    description: 'ODS layer — raw ingestion from sample CSV'\n"
-        f"    columns:\n"
-        f"      - name: record_id\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"      - name: pull_date\n"
-        f"        tests:\n"
-        f"          - not_null\n\n"
-        f"  - name: {dim_model}\n"
-        f"    description: 'Date dimension (seed-backed)'\n"
-        f"    columns:\n"
-        f"      - name: date_sk\n"
-        f"        tests:\n"
-        f"          - not_null\n\n"
-        f"  - name: {dwd_model}\n"
-        f"    description: 'DWD fact — daily order line detail'\n"
-        f"    columns:\n"
-        f"      - name: order_line_sk\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"          - unique\n"
-        f"      - name: date_key\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"          - relationships:\n"
-        f"              to: ref('{dim_model}')\n"
-        f"              field: date_sk\n\n"
-        f"  - name: {dws_model}\n"
-        f"    description: 'DWS — daily revenue aggregation'\n"
-        f"    columns:\n"
-        f"      - name: date_key\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"      - name: order_count\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"      - name: daily_revenue\n"
-        f"        tests:\n"
-        f"          - not_null\n\n"
-        f"  - name: {ads_model}\n"
-        f"    description: 'ADS — executive dashboard OBT'\n"
-        f"    columns:\n"
-        f"      - name: calendar_date\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"      - name: order_count\n"
-        f"        tests:\n"
-        f"          - not_null\n"
-        f"      - name: daily_revenue\n"
-        f"        tests:\n"
-        f"          - not_null\n\n"
-        f"seeds:\n"
-        f"  - name: raw_sample_data\n"
-        f"    description: 'Sample order data for fixture/demo'\n"
-        f"  - name: dim_date\n"
-        f"    description: 'Calendar seed with business day flags'\n"
+
+    schema_content = "version: 2\n\nmodels:\n"
+
+    if active.get("T-6", False):
+        schema_content += (
+            f"  - name: {ods_model}\n"
+            f"    description: 'ODS layer — raw ingestion from sample CSV'\n"
+            f"    columns:\n"
+            f"      - name: record_id\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"      - name: pull_date\n"
+            f"        data_tests:\n"
+            f"          - not_null\n\n"
+        )
+
+    if active.get("T-7", False):
+        schema_content += (
+            f"  - name: {dim_model}\n"
+            f"    description: 'Date dimension (seed-backed)'\n"
+            f"    columns:\n"
+            f"      - name: date_sk\n"
+            f"        data_tests:\n"
+            f"          - not_null\n\n"
+        )
+
+    if active.get("T-8", False):
+        schema_content += (
+            f"  - name: {dwd_model}\n"
+            f"    description: 'DWD fact — daily order line detail'\n"
+            f"    columns:\n"
+            f"      - name: order_line_sk\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"          - unique\n"
+            f"      - name: date_key\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"          - relationships:\n"
+            f"              arguments:\n"
+            f"                to: ref('{dim_model}')\n"
+            f"                field: date_sk\n\n"
+        )
+
+    if active.get("T-9", False):
+        schema_content += (
+            f"  - name: {dws_model}\n"
+            f"    description: 'DWS — daily revenue aggregation'\n"
+            f"    columns:\n"
+            f"      - name: date_key\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"      - name: order_count\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"      - name: daily_revenue\n"
+            f"        data_tests:\n"
+            f"          - not_null\n\n"
+        )
+
+    if active.get("T-11", False):
+        schema_content += (
+            f"  - name: {ads_model}\n"
+            f"    description: 'ADS — executive dashboard OBT'\n"
+            f"    columns:\n"
+            f"      - name: calendar_date\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"      - name: order_count\n"
+            f"        data_tests:\n"
+            f"          - not_null\n"
+            f"      - name: daily_revenue\n"
+            f"        data_tests:\n"
+            f"          - not_null\n\n"
+        )
+
+    schema_content += (
+        "seeds:\n"
+        "  - name: raw_sample_data\n"
+        "    description: 'Sample order data for fixture/demo'\n"
+        "  - name: dim_date\n"
+        "    description: 'Calendar seed with business day flags'\n"
     )
+
+    schema = mart_dir / "models" / "schema.yml"
+    (mart_dir / "models").mkdir(parents=True, exist_ok=True)
+    schema.write_text(schema_content)
     files_created.append("models/schema.yml")
 
-    # Dashboard — render template with mart_name, prefix, db_name substitution
+    # Dashboard — copy template (reads from mart.yml at runtime)
     dash_dir = mart_dir / "dashboard"
     dash_dir.mkdir(exist_ok=True)
     dash_template = templates_dir / "dashboard" / "app.py"
     if dash_template.exists():
-        dash_content = dash_template.read_text()
-        dash_content = dash_content.replace("{mart_name}", mart_name)
-        dash_content = dash_content.replace("{prefix}", prefix)
-        dash_content = dash_content.replace("{db_name}", safe_name)
-        (dash_dir / "app.py").write_text(dash_content)
+        shutil.copy2(dash_template, dash_dir / "app.py")
     files_created.append("dashboard/app.py")
-
-    (dash_dir / "requirements.txt").write_text("streamlit>=1.30\nduckdb>=0.10\n")
+    (dash_dir / "requirements.txt").write_text(
+        "streamlit>=1.30\nduckdb>=0.10\npyyaml>=6.0\n"
+    )
     files_created.append("dashboard/requirements.txt")
 
     # DQC scorecard template

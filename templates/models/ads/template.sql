@@ -7,7 +7,7 @@
 {#
   ADS Model — Executive Dashboard OBT
   Grain: one row per calendar date.
-  Metric traceability: order_count -> BRD M-1, daily_revenue -> BRD M-2.
+  Metric traceability: daily_revenue -> BRD M-1 (exact), order_count -> BRD M-2 (proxy).
 #}
 
 with summary_data as (

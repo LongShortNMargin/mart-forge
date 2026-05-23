@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from mart_forge.scaffold import scaffold, _is_signed, _validate_brd, _validate_tdd
 
@@ -124,8 +125,8 @@ not_applicable rationale: No performance/ratio metrics required for this basic o
 | column_name | data_type | definition | example_value | calculation | data_source | BRD_ref | link_status |
 |-------------|-----------|------------|---------------|-------------|-------------|---------|-------------|
 | calendar_date | DATE | Date context | 2020-01-01 | dim_date.calendar_date via join | dim_date | - | exact |
-| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-1 | exact |
-| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-2 | proxy |
+| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-2 | proxy |
+| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |
 
 ## T-12. Physical Design
 Column-level specs provided in T-6 through T-11.
@@ -430,13 +431,14 @@ class TestSuccessfulScaffold:
         app = signed_mart / "dashboard" / "app.py"
         assert app.exists()
         content = app.read_text()
-        assert "test-mart" in content
         assert "duckdb" in content
         assert "get_connection" in content
         assert "load_ads_data" in content
-        assert "tst_ads_exec_dashboard" in content
+        assert "mart.yml" in content
         assert "scorecard" in content.lower()
         assert "provenance" in content.lower()
+        contract = yaml.safe_load((signed_mart / "mart.yml").read_text())
+        assert contract["dashboard"]["ads_table"] == "tst_ads_exec_dashboard"
 
     def test_scorecard_json_created(self, signed_mart):
         scaffold(signed_mart, "test-mart", "tst")
@@ -524,6 +526,252 @@ class TestSignOffDetection:
 
     def test_missing_doc_not_signed(self, tmp_path):
         assert not _is_signed(tmp_path / "nonexistent.md")
+
+
+class TestContractGeneration:
+    """Implementation contract (mart.yml) must be generated from signed BRD/TDD."""
+
+    def test_contract_generated(self, signed_mart):
+        result = scaffold(signed_mart, "test-mart", "tst")
+        assert result["success"]
+        contract_path = signed_mart / "mart.yml"
+        assert contract_path.exists()
+        contract = yaml.safe_load(contract_path.read_text())
+        assert contract["mart"]["name"] == "test-mart"
+        assert contract["mart"]["prefix"] == "tst"
+        assert contract["mart"]["db_name"] == "test_mart"
+
+    def test_contract_metrics_match_brd(self, signed_mart):
+        scaffold(signed_mart, "test-mart", "tst")
+        contract = yaml.safe_load((signed_mart / "mart.yml").read_text())
+        metrics = contract["metrics"]
+        assert len(metrics) == 2
+        m1 = next(m for m in metrics if m["id"] == "M-1")
+        assert m1["name"] == "Revenue"
+        assert m1["source_type"] == "native"
+        assert m1["link_status"] == "exact"
+        assert m1["ads_column"] == "daily_revenue"
+        m2 = next(m for m in metrics if m["id"] == "M-2")
+        assert m2["name"] == "Order Count"
+        assert m2["source_type"] == "derived"
+        assert m2["link_status"] == "proxy"
+        assert m2["ads_column"] == "order_count"
+
+    def test_contract_active_layers(self, signed_mart):
+        scaffold(signed_mart, "test-mart", "tst")
+        contract = yaml.safe_load((signed_mart / "mart.yml").read_text())
+        layers = contract["layers"]
+        assert layers["ods"]["active"] is True
+        assert layers["dim"]["active"] is True
+        assert layers["dwd"]["active"] is True
+        assert layers["dws_count"]["active"] is True
+        assert layers["dws_perf"]["active"] is False
+        assert layers["ads"]["active"] is True
+
+    def test_contract_dashboard_bindings(self, signed_mart):
+        scaffold(signed_mart, "test-mart", "tst")
+        contract = yaml.safe_load((signed_mart / "mart.yml").read_text())
+        assert contract["dashboard"]["ads_table"] == "tst_ads_exec_dashboard"
+        assert contract["dashboard"]["dws_table"] == "tst_dws_daily_revenue_1d"
+
+    def test_contract_in_files_created(self, signed_mart):
+        result = scaffold(signed_mart, "test-mart", "tst")
+        assert "mart.yml" in result["files_created"]
+
+
+class TestEmptyDesignBypass:
+    """TDDs with no actual design must be rejected (Finding 1)."""
+
+    ALL_NA_TDD = """\
+# Technical Design Document — Empty Design
+
+## T-1. Version History
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 0.1 | 2026-01-01 | Test | Initial |
+
+## T-2. Design Reasoning
+No design required.
+
+## T-3. Table Summary
+| Table Name | Layer | Purpose | Grain | Materialization |
+|------------|-------|---------|-------|-----------------|
+
+## T-4. Data Architecture Diagram
+N/A
+
+## T-5. Column Specification
+Per-table specs follow in T-6 through T-11.
+
+## T-6. ODS Table Design
+not_applicable rationale: No ingestion needed for this hypothetical mart.
+
+## T-7. Dimension Table Design
+not_applicable rationale: No dimensions needed for this design.
+
+## T-8. Fact Table Design (DWD)
+not_applicable rationale: No fact table in this design.
+
+## T-9. Count Aggregation Design (DWS)
+not_applicable rationale: No count aggregation required.
+
+## T-10. Performance Aggregation Design (DWS)
+not_applicable rationale: No performance aggregation required.
+
+## T-11. Presentation Table Design (ADS)
+| column_name | data_type | definition | example_value | calculation | data_source |
+|-------------|-----------|------------|---------------|-------------|-------------|
+
+## T-12. Physical Design
+N/A
+
+## T-13. Implementation Specification
+N/A
+
+## T-14. DQC Plan
+N/A
+
+## T-15. Test Inventory
+N/A
+
+## T-16. Operations
+N/A
+
+## T-17. Known Limitations
+None.
+
+Sign-off: APPROVED
+Grade: A
+"""
+
+    def test_rejects_all_na_tdd_bypass(self, mart_dir):
+        """A TDD with all N/A layers and empty T-11 table must be rejected."""
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(self.ALL_NA_TDD)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted TDD with no actual design"
+        assert any("ODS" in e and "not_applicable" in e for e in result["errors"])
+        assert any("no data rows" in e.lower() or "not_applicable" in e for e in result["errors"])
+
+    def test_rejects_na_ods(self, mart_dir):
+        """T-6 ODS cannot be not_applicable — every mart needs ingestion."""
+        mart_dir.mkdir()
+        t6_start = VALID_TDD.find("## T-6. ODS Table Design")
+        t7_start = VALID_TDD.find("## T-7. Dimension Table Design")
+        na_ods_tdd = (
+            VALID_TDD[:t6_start]
+            + "## T-6. ODS Table Design\n\n"
+            + "not_applicable rationale: No ODS layer needed for this mart.\n\n"
+            + VALID_TDD[t7_start:]
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(na_ods_tdd)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted TDD with N/A ODS layer"
+        assert any("T-6" in e and "not_applicable" in e for e in result["errors"])
+
+    def test_rejects_header_only_ads(self, mart_dir):
+        """T-11 with column_name header but no data rows must be rejected."""
+        mart_dir.mkdir()
+        header_only_tdd = VALID_TDD.replace(
+            "| calendar_date | DATE | Date context | 2020-01-01 | dim_date.calendar_date via join | dim_date | - | exact |\n"
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-2 | proxy |\n"
+            "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+            ""
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(header_only_tdd)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted TDD with header-only T-11"
+        assert any("no data rows" in e.lower() for e in result["errors"])
+
+    def test_rejects_no_fact_layer(self, mart_dir):
+        """At least one fact/aggregation layer (T-8 DWD or T-9 DWS) is required."""
+        mart_dir.mkdir()
+        no_fact = VALID_TDD.replace(
+            "## T-8. Fact Table Design (DWD)\n\n"
+            "| column_name | data_type | definition | example_value | calculation | data_source | source_type |\n"
+            "|-------------|-----------|------------|---------------|-------------|-------------|-------------|\n"
+            "| order_line_sk | VARCHAR | Surrogate key | abc123 | md5(record_id || pull_date) | derived | derived |\n"
+            "| date_key | INTEGER | FK to dim_date | 1 | coalesce(dim_date.date_sk, -1) | dim_date | native |\n"
+            "| amount | DECIMAL | Order amount | 99.50 | not_applicable — pass-through from ODS | ods | native |\n\n"
+            "Provenance columns: provider, pull_ts_utc, quote_ts_utc, run_id",
+            "## T-8. Fact Table Design (DWD)\n\n"
+            "not_applicable rationale: No fact table in this design. All data flows directly to aggregation."
+        ).replace(
+            "## T-9. Count Aggregation Design (DWS)\n\n"
+            "| column_name | data_type | definition | example_value | calculation | data_source |\n"
+            "|-------------|-----------|------------|---------------|-------------|-------------|\n"
+            "| date_key | INTEGER | FK to dim_date | 1 | not_applicable — pass-through | DWD |\n"
+            "| order_count | BIGINT | Daily order count | 3 | COUNT(DISTINCT record_id) | DWD aggregation |\n"
+            "| daily_revenue | DECIMAL | Total daily revenue | 325.75 | SUM(amount) | DWD aggregation |",
+            "## T-9. Count Aggregation Design (DWS)\n\n"
+            "not_applicable rationale: No count aggregation. All metrics in T-8."
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(no_fact)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted TDD with no fact/aggregation layer"
+        assert any("fact" in e.lower() or "aggregation" in e.lower() for e in result["errors"])
+
+
+class TestContractLinkage:
+    """BRD metric-to-ADS traceability must be validated (Finding 3)."""
+
+    def test_rejects_mismatched_link_status(self, mart_dir):
+        """T-11 link_status must match BRD metric link_status."""
+        mart_dir.mkdir()
+        bad_tdd = VALID_TDD.replace(
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-2 | proxy |",
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-2 | exact |"
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(bad_tdd)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted mismatched link_status"
+        assert any("link_status" in e for e in result["errors"])
+
+    def test_rejects_invalid_brd_ref(self, mart_dir):
+        """T-11 BRD_ref must reference an actual BRD metric."""
+        mart_dir.mkdir()
+        bad_tdd = VALID_TDD.replace(
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-2 | proxy |",
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-99 | proxy |"
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(bad_tdd)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted T-11 referencing non-existent metric"
+        assert any("M-99" in e for e in result["errors"])
+
+    def test_rejects_untraced_brd_metric(self, mart_dir):
+        """Every BRD metric must be traced in T-11."""
+        mart_dir.mkdir()
+        missing_tdd = VALID_TDD.replace(
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | M-2 | proxy |",
+            "| order_count | BIGINT | Daily orders | 3 | dws.order_count via join | DWS | - | proxy |"
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(missing_tdd)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted TDD missing BRD metric trace"
+        assert any("M-2" in e and "not traced" in e for e in result["errors"])
+
+    def test_dashboard_no_uncontracted_metrics(self, signed_mart):
+        """Dashboard must not display metrics not in the contract."""
+        scaffold(signed_mart, "test-mart", "tst")
+        content = (signed_mart / "dashboard" / "app.py").read_text()
+        assert "Avg Order Value" not in content, \
+            "Dashboard shows uncontracted metric"
+        assert '"unsupported"' not in content or "unsupported" in content.lower(), \
+            "Dashboard must not use unsupported for operational errors"
+
+    def test_dashboard_error_state_not_unsupported(self, signed_mart):
+        """Connection/data failures must show operational error, not unsupported."""
+        scaffold(signed_mart, "test-mart", "tst")
+        content = (signed_mart / "dashboard" / "app.py").read_text()
+        assert "Data unavailable" in content or "pipeline has not been run" in content
 
 
 class TestNameSanitization:

@@ -143,21 +143,81 @@ class TestTDDTemplateSections:
 
     def test_has_six_column_physical_design(self):
         content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
-        assert "column_name" in content
-        assert "data_type" in content
-        assert "definition" in content
-        assert "example_value" in content
-        assert "calculation" in content
-        assert "data_source" in content
+        for col in ["column_name", "data_type", "definition", "example_value", "calculation", "data_source"]:
+            assert col in content, f"TDD template missing column spec field: {col}"
 
     def test_has_ods_contract_fields(self):
         content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
-        for field in ["Grain", "Logical Partition", "Incremental Strategy", "Unique Key", "Backfill", "Restatement", "Provenance"]:
+        for field in ["Grain", "Logical Partition", "Incremental Strategy", "Unique Key",
+                       "Backfill", "Restatement", "Provenance"]:
             assert field in content, f"TDD template missing ODS contract field: {field}"
 
     def test_has_idempotence_reference(self):
         content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
         assert "idempoten" in content.lower()
+
+    def test_t7_has_full_column_spec(self):
+        content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
+        t7_start = content.find("## T-7")
+        t8_start = content.find("## T-8")
+        assert t7_start > 0 and t8_start > t7_start
+        t7_section = content[t7_start:t8_start]
+        assert "column_name" in t7_section, "T-7 missing full column spec table"
+        assert "calculation" in t7_section, "T-7 missing calculation column"
+        assert "not_applicable" in t7_section, "T-7 missing N/A rationale provision"
+
+    def test_t8_has_full_column_spec_with_source_type(self):
+        content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
+        t8_start = content.find("## T-8")
+        t9_start = content.find("## T-9")
+        assert t8_start > 0 and t9_start > t8_start
+        t8_section = content[t8_start:t9_start]
+        assert "column_name" in t8_section, "T-8 missing full column spec table"
+        assert "source_type" in t8_section, "T-8 missing source_type classification"
+        assert "native" in t8_section, "T-8 missing native source_type"
+        assert "derived" in t8_section, "T-8 missing derived source_type"
+        assert "provenance" in t8_section.lower(), "T-8 missing provenance columns"
+
+    def test_t9_has_full_column_spec(self):
+        content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
+        t9_start = content.find("## T-9")
+        t10_start = content.find("## T-10")
+        assert t9_start > 0 and t10_start > t9_start
+        t9_section = content[t9_start:t10_start]
+        assert "column_name" in t9_section, "T-9 missing full column spec table"
+        assert "calculation" in t9_section, "T-9 missing calculation column"
+
+    def test_t10_has_full_column_spec(self):
+        content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
+        t10_start = content.find("## T-10")
+        t11_start = content.find("## T-11")
+        assert t10_start > 0 and t11_start > t10_start
+        t10_section = content[t10_start:t11_start]
+        assert "column_name" in t10_section, "T-10 missing full column spec table"
+        assert "calculation" in t10_section, "T-10 missing calculation column"
+
+    def test_t11_has_full_column_spec_with_traceability(self):
+        content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
+        t11_start = content.find("## T-11")
+        t12_start = content.find("## T-12")
+        assert t11_start > 0 and t12_start > t11_start
+        t11_section = content[t11_start:t12_start]
+        assert "column_name" in t11_section, "T-11 missing full column spec table"
+        assert "BRD" in t11_section, "T-11 missing BRD traceability"
+        assert "link_status" in t11_section.lower() or "Link Status" in t11_section, \
+            "T-11 missing link_status in traceability"
+
+    def test_all_table_sections_have_not_applicable_provision(self):
+        content = (ROOT / "templates" / "tech-design-doc.template.md").read_text()
+        for section_label in ["T-7", "T-8", "T-9", "T-10", "T-11"]:
+            start = content.find(f"## {section_label}")
+            next_num = int(section_label.split("-")[1]) + 1
+            end = content.find(f"## T-{next_num}")
+            if end < 0:
+                end = len(content)
+            section = content[start:end]
+            assert "not_applicable" in section, \
+                f"{section_label} missing not_applicable rationale provision"
 
 
 class TestHardGates:
@@ -174,6 +234,54 @@ class TestHardGates:
         assert "Phase" in content
         assert "BRD" in content
         assert "TDD" in content
+
+
+class TestModelTemplates:
+    @staticmethod
+    def _code_lines(content: str) -> list[str]:
+        lines = []
+        in_jinja_comment = False
+        for raw in content.splitlines():
+            stripped = raw.strip()
+            if "{#" in stripped:
+                in_jinja_comment = True
+            if in_jinja_comment:
+                if "#}" in stripped:
+                    in_jinja_comment = False
+                continue
+            if not stripped or stripped.startswith("--") or stripped.startswith("{"):
+                continue
+            lines.append(stripped)
+        return lines
+
+    def test_no_select_star_in_ods(self):
+        content = (ROOT / "templates" / "models" / "ods" / "template.sql").read_text()
+        for line in self._code_lines(content):
+            assert "select *" not in line.lower(), f"ODS template uses SELECT *: {line}"
+
+    def test_no_select_star_in_dim(self):
+        content = (ROOT / "templates" / "models" / "dim" / "template.sql").read_text()
+        for line in self._code_lines(content):
+            assert "select *" not in line.lower(), f"DIM template uses SELECT *: {line}"
+
+    def test_no_select_star_in_dwd(self):
+        content = (ROOT / "templates" / "models" / "dwd" / "template.sql").read_text()
+        for line in self._code_lines(content):
+            assert "select *" not in line.lower(), f"DWD template uses SELECT *: {line}"
+
+    def test_no_select_star_in_dws(self):
+        content = (ROOT / "templates" / "models" / "dws" / "template.sql").read_text()
+        for line in self._code_lines(content):
+            assert "select *" not in line.lower(), f"DWS template uses SELECT *: {line}"
+
+    def test_no_select_star_in_ads(self):
+        content = (ROOT / "templates" / "models" / "ads" / "template.sql").read_text()
+        for line in self._code_lines(content):
+            assert "select *" not in line.lower(), f"ADS template uses SELECT *: {line}"
+
+    def test_dwd_no_dbt_utils_dependency(self):
+        content = (ROOT / "templates" / "models" / "dwd" / "template.sql").read_text()
+        assert "dbt_utils" not in content, "DWD template depends on dbt_utils"
 
 
 class TestScripts:

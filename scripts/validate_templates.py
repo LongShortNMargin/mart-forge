@@ -90,6 +90,35 @@ def check_tdd_template_sections() -> list[str]:
     for section in TDD_MANDATORY_SECTIONS:
         if section not in content:
             missing.append(f"TDD template missing section {section}")
+
+    table_sections = ["T-7", "T-8", "T-9", "T-10", "T-11"]
+    for section_label in table_sections:
+        start = content.find(f"## {section_label}")
+        if start < 0:
+            continue
+        next_num = int(section_label.split("-")[1]) + 1
+        end = content.find(f"## T-{next_num}")
+        if end < 0:
+            end = len(content)
+        section_text = content[start:end]
+
+        if "column_name" not in section_text:
+            missing.append(f"{section_label} missing column_name in column spec")
+        if "calculation" not in section_text:
+            missing.append(f"{section_label} missing calculation in column spec")
+        if "not_applicable" not in section_text:
+            missing.append(f"{section_label} missing not_applicable rationale provision")
+
+    if "T-8" in content:
+        t8_start = content.find("## T-8")
+        t9_start = content.find("## T-9")
+        if t8_start > 0 and t9_start > t8_start:
+            t8_text = content[t8_start:t9_start]
+            if "source_type" not in t8_text:
+                missing.append("T-8 missing source_type classification")
+            if "provenance" not in t8_text.lower():
+                missing.append("T-8 missing provenance columns")
+
     return missing
 
 

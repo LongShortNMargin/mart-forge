@@ -9,41 +9,33 @@
 
   Rules:
   - Full rebuild (table materialization)
-  - Window suffix conventions: _1d (daily), _nd (rolling), _td (to-date), _mtd (month-to-date)
+  - Window suffix: _1d (daily), _nd (rolling), _td (to-date), _mtd (month-to-date)
   - Every aggregation has explicit SQL in calculation column
   - Source_type: typically derived or hybrid
-  - ref() from DWD fact tables
-
-  Replace placeholders with actual aggregation logic from TDD T-9/T-10.
+  - Explicit column list — no SELECT *
 #}
 
 with fact_data as (
-    select * from {{ ref('prefix_dwd_grain_entity_di') }}
+    select
+        date_key,
+        -- Add explicit DWD columns from TDD T-8 needed for aggregation
+        provider,
+        pull_ts_utc
+    from {{ ref('prefix_dwd_grain_entity_di') }}
 ),
 
 aggregated as (
     select
-        -- Grain key(s) for the aggregation
         date_key,
 
-        -- Count aggregations (T-9)
-        -- count(distinct entity_id) as entity_count,
+        -- Count aggregations (T-9, source_type: derived)
+        -- count(distinct entity_key) as entity_count,
 
-        -- Sum aggregations
-        -- sum(metric_1) as total_metric_1,
+        -- Sum aggregations (T-9, source_type: derived)
+        -- sum(metric_column) as total_metric,
 
-        -- Performance / ratio aggregations (T-10)
-        -- sum(numerator) / nullif(sum(denominator), 0) as ratio_metric,
-
-        -- Window aggregations
-        -- avg(metric_1) over (
-        --     order by date_key
-        --     rows between 6 preceding and current row
-        -- ) as metric_1_7d_avg,
-
-        -- Min/max
-        -- min(metric_1) as min_metric_1,
-        -- max(metric_1) as max_metric_1
+        -- Performance / ratio aggregations (T-10, source_type: derived)
+        -- sum(numerator_col) / nullif(sum(denominator_col), 0) as ratio_metric,
 
         current_timestamp as calculated_at
 
@@ -51,4 +43,7 @@ aggregated as (
     group by date_key
 )
 
-select * from aggregated
+select
+    date_key,
+    calculated_at
+from aggregated

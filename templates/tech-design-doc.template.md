@@ -141,63 +141,177 @@ Source(s)
 
 ## T-7. Dimension Table Design
 
-{Conformed dimensions with SCD strategy.}
+{Conformed dimensions with SCD strategy. Each dimension gets the full column spec.}
 
 ### {prefix}_dim_{entity}
 
-| Attribute | SCD Type | Seed-Backed | Notes |
-|-----------|----------|-------------|-------|
-| {attribute} | Type 0/1/2 | Yes/No | {notes} |
+**Design properties:**
 
-**Unknown member:** Row with surrogate key = -1, all attributes = 'Unknown'.
+| Property | Value |
+|----------|-------|
+| Grain | One row = one {entity} |
+| SCD Strategy | Type 0 (immutable) / Type 1 (overwrite) / Type 2 (history) |
+| Seed-Backed | Yes / No |
+| Unknown Member | Row with surrogate key = -1, all attributes = 'Unknown' |
+
+**Column specification (6-column format):**
+
+| column_name | data_type | definition | example_value | calculation | data_source |
+|-------------|-----------|-----------|---------------|------------|-------------|
+| {entity}_sk | INTEGER | Surrogate key | 1 | row_number() over (order by {entity}_id) | Generated |
+| {entity}_id | VARCHAR | Natural key from source | 'ENT-001' | source.entity_id -> pass-through | {source} |
+| {entity}_name | VARCHAR | Descriptive name | 'Example Entity' | source.name -> pass-through | {source} |
+| effective_from | DATE | SCD2: validity start (if Type 2) | '2026-01-01' | Type 2 merge logic | Generated |
+| effective_to | DATE | SCD2: validity end (if Type 2) | '9999-12-31' | Type 2 merge logic | Generated |
+| is_current | BOOLEAN | SCD2: current row flag (if Type 2) | true | Type 2 merge logic | Generated |
+
+{Repeat the full column specification table for each dimension table in the design.}
+{If this table type is not required, provide a signed not_applicable rationale below.}
+
+**not_applicable rationale (if this table type is not required):**
+{Rationale with sign-off stamp, e.g.: "No conformed dimensions required because..." [SIGN-OFF STAMP]}
 
 ---
 
 ## T-8. Fact Table Design (DWD)
 
-{Cleaned facts with business keys and source_type classification.}
+{Cleaned facts with business keys. Every metric-bearing column requires source_type classification.}
 
 ### {prefix}_dwd_{grain}_{entity}_di
 
-| Column | Source Type | Calculation | Notes |
-|--------|------------|-------------|-------|
-| {metric_column} | native/derived/hybrid | {SQL or field mapping} | {notes} |
+**Design properties:**
+
+| Property | Value |
+|----------|-------|
+| Grain | One row = {grain definition} |
+| Incremental Strategy | delete+insert |
+| Unique Key | {composite key columns} |
+| Upstream | {prefix}_ods_{source}_{entity} |
+
+**Column specification (6-column format) — source_type required for metric columns:**
+
+| column_name | data_type | definition | example_value | calculation | data_source |
+|-------------|-----------|-----------|---------------|------------|-------------|
+| fact_sk | VARCHAR | Surrogate key (hash) | 'a1b2c3...' | md5(record_id \|\| pull_date) | Generated |
+| date_key | INTEGER | FK to dim_date | 1 | dim_date.date_sk via join on pull_date | dim_date |
+| {entity}_key | INTEGER | FK to dim_{entity} | 1 | coalesce(dim.{entity}_sk, -1) | dim_{entity} |
+| {native_metric} | DECIMAL | {definition} [source_type: native] | 10.50 | source.field_name -> pass-through | ODS |
+| {derived_metric} | DECIMAL | {definition} [source_type: derived] | 105.00 | {actual SQL: field_a * field_b} | Computed |
+| {hybrid_metric} | DECIMAL | {definition} [source_type: hybrid] | 50.25 | {actual SQL + reconciliation rule} | ODS + Computed |
+| provider | VARCHAR | Source identifier [provenance] | 'provider_name' | source.provider -> pass-through | ODS |
+| pull_ts_utc | TIMESTAMP | Ingestion timestamp [provenance] | '2026-01-01T06:00:00Z' | source.pull_ts_utc -> pass-through | ODS |
+| quote_ts_utc | TIMESTAMP | Source data timestamp [provenance] | '2026-01-01T05:30:00Z' | source.quote_ts_utc -> pass-through | ODS |
+| run_id | VARCHAR | Pipeline run trace [provenance] | 'uuid-here' | source.run_id -> pass-through | ODS |
+
+{Repeat the full column specification table for each DWD fact table.}
+{If this table type is not required, provide a signed not_applicable rationale below.}
+
+**not_applicable rationale (if this table type is not required):**
+{Rationale with sign-off stamp}
 
 ---
 
 ## T-9. Count Aggregation Design (DWS)
 
-{Count-type aggregations with explicit SQL.}
+{Count-type DWS tables. Every aggregation column requires explicit SQL and source_type (typically derived).}
 
 ### {prefix}_dws_{dims}_{metric}_{window}
 
-| Metric | Source Type | Calculation (SQL) |
-|--------|------------|-------------------|
-| {count_metric} | derived | {explicit SQL, e.g., COUNT(DISTINCT entity_id)} |
+**Design properties:**
+
+| Property | Value |
+|----------|-------|
+| Grain | One row = {aggregation grain} |
+| Window | {_1d / _nd / _td / _mtd} |
+| Materialization | table (full rebuild) |
+| Upstream | {prefix}_dwd_{grain}_{entity}_di |
+
+**Column specification (6-column format):**
+
+| column_name | data_type | definition | example_value | calculation | data_source |
+|-------------|-----------|-----------|---------------|------------|-------------|
+| date_key | INTEGER | FK to dim_date | 1 | source.date_key -> pass-through | DWD |
+| {count_metric} | BIGINT | {definition} [source_type: derived] | 150 | COUNT(DISTINCT {entity}_key) | DWD aggregation |
+| {sum_metric} | DECIMAL | {definition} [source_type: derived] | 5000.00 | SUM({metric_column}) | DWD aggregation |
+| calculated_at | TIMESTAMP | Aggregation timestamp | '2026-01-01T06:05:00Z' | current_timestamp | Generated |
+
+{Repeat for each count-type DWS table.}
+{If this table type is not required, provide a signed not_applicable rationale below.}
+
+**not_applicable rationale (if this table type is not required):**
+{Rationale with sign-off stamp}
 
 ---
 
 ## T-10. Performance Aggregation Design (DWS)
 
-{Performance/ratio aggregations with explicit SQL.}
+{Performance/ratio DWS tables. Every ratio column requires explicit SQL and source_type classification.}
 
 ### {prefix}_dws_{dims}_{metric}_{window}
 
-| Metric | Source Type | Calculation (SQL) |
-|--------|------------|-------------------|
-| {ratio_metric} | derived | {explicit SQL, e.g., SUM(x) / NULLIF(SUM(y), 0)} |
+**Design properties:**
+
+| Property | Value |
+|----------|-------|
+| Grain | One row = {aggregation grain} |
+| Window | {_1d / _nd / _td / _mtd} |
+| Materialization | table (full rebuild) |
+| Upstream | {prefix}_dwd_{grain}_{entity}_di |
+
+**Column specification (6-column format):**
+
+| column_name | data_type | definition | example_value | calculation | data_source |
+|-------------|-----------|-----------|---------------|------------|-------------|
+| date_key | INTEGER | FK to dim_date | 1 | source.date_key -> pass-through | DWD |
+| {ratio_metric} | DECIMAL | {definition} [source_type: derived] | 0.75 | SUM(numerator) / NULLIF(SUM(denominator), 0) | DWD aggregation |
+| {avg_metric} | DECIMAL | {definition} [source_type: derived] | 42.50 | AVG({metric_column}) | DWD aggregation |
+| {window_metric} | DECIMAL | {definition} [source_type: derived] | 38.20 | AVG({col}) OVER (ORDER BY date_key ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) | DWD window |
+| calculated_at | TIMESTAMP | Aggregation timestamp | '2026-01-01T06:05:00Z' | current_timestamp | Generated |
+
+{Repeat for each performance-type DWS table.}
+{If this table type is not required, provide a signed not_applicable rationale below.}
+
+**not_applicable rationale (if this table type is not required):**
+{Rationale with sign-off stamp}
 
 ---
 
 ## T-11. Presentation Table Design (ADS)
 
-{Application-facing OBTs with metric-to-column traceability.}
+{Application-facing OBTs. Every column must trace to an upstream DWS/DWD model and to a BRD metric.}
 
 ### {prefix}_ads_{consumer}_{purpose}
 
-| Column | Upstream Source | Traceability |
-|--------|---------------|-------------|
-| {column} | {dws/dwd model}.{column} | BRD metric M-{N} |
+**Design properties:**
+
+| Property | Value |
+|----------|-------|
+| Grain | One row = {presentation grain} |
+| Materialization | table (full rebuild) |
+| Consumer | {who/what consumes this table} |
+| Upstream | {prefix}_dws_* and {prefix}_dim_* |
+
+**Column specification (6-column format) with traceability:**
+
+| column_name | data_type | definition | example_value | calculation | data_source |
+|-------------|-----------|-----------|---------------|------------|-------------|
+| calendar_date | DATE | Date context | '2026-01-15' | dim_date.calendar_date via join | dim_date |
+| {entity}_name | VARCHAR | Entity descriptor | 'Example' | dim_{entity}.{entity}_name via join | dim_{entity} |
+| {metric_1} | DECIMAL | {definition} — traces to BRD M-{N} | 150.00 | dws_{model}.{metric_column} via join | DWS |
+| {metric_2} | DECIMAL | {definition} — traces to BRD M-{N} | 0.75 | dws_{model}.{ratio_column} via join | DWS |
+| calculated_at | TIMESTAMP | Last aggregation time | '2026-01-01T06:05:00Z' | dws_{model}.calculated_at via join | DWS |
+
+**Metric traceability matrix:**
+
+| ADS Column | Upstream Model.Column | BRD Metric | Link Status |
+|------------|----------------------|------------|-------------|
+| {metric_1} | {dws_model}.{column} | M-{N} | exact/proxy/unsupported |
+
+{Repeat for each ADS table.}
+{If this table type is not required, provide a signed not_applicable rationale below.}
+
+**not_applicable rationale (if this table type is not required):**
+{Rationale with sign-off stamp}
 
 ---
 

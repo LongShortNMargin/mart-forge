@@ -17,27 +17,20 @@
   - Idempotent: re-running same partition produces identical output
 
   ODS Contract fields (from TDD T-6):
-  - source: provider + endpoint
-  - grain: what one row represents
-  - logical_partition: column for incremental windowing
-  - incremental_strategy: delete+insert (or append)
-  - unique_key: deduplication composite
-  - backfill: dbt run --vars '{partition_date: "YYYY-MM-DD"}'
-  - restatement: re-run affected partition; delete+insert replaces it
-  - provenance: provider, pull_ts_utc, quote_ts_utc, run_id
+  - source, grain, logical_partition, incremental_strategy
+  - unique_key, backfill, restatement, provenance_columns
 #}
 
 with source_data as (
     select
-        -- Source columns (explicit list from TDD T-5)
-        -- column_1,
-        -- column_2,
-        -- column_3,
+        -- Source columns: explicit list from TDD T-5 (replace with actual columns)
+        cast(null as varchar) as record_id,
+        cast(null as date) as pull_date,
 
-        -- Provenance columns (required)
+        -- Provenance columns (required on every ODS row)
         '{{ var("provider", "unknown") }}' as provider,
         current_timestamp as pull_ts_utc,
-        null as quote_ts_utc,  -- Replace with source timestamp column
+        cast(null as timestamp) as quote_ts_utc,
         '{{ var("run_id", "manual") }}' as run_id
 
     from {{ source('raw', 'source_table') }}
@@ -48,4 +41,11 @@ with source_data as (
     {% endif %}
 )
 
-select * from source_data
+select
+    record_id,
+    pull_date,
+    provider,
+    pull_ts_utc,
+    quote_ts_utc,
+    run_id
+from source_data

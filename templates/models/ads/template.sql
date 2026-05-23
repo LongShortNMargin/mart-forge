@@ -16,38 +16,43 @@
 #}
 
 with summary_data as (
-    select * from {{ ref('prefix_dws_dims_metric_window') }}
+    select
+        date_key,
+        calculated_at
+        -- Add explicit DWS metric columns from TDD T-9/T-10
+    from {{ ref('prefix_dws_dims_metric_window') }}
 ),
 
-dimension_data as (
-    select * from {{ ref('prefix_dim_entity') }}
-),
-
-date_data as (
-    select * from {{ ref('prefix_dim_date') }}
+date_dim as (
+    select
+        date_sk,
+        calendar_date,
+        day_name,
+        is_business_day
+    from {{ ref('prefix_dim_date') }}
 ),
 
 final as (
     select
         -- Date context
         dt.calendar_date,
-        dt.day_of_week,
+        dt.day_name,
         dt.is_business_day,
 
-        -- Dimension context
-        dim.entity_name,
+        -- Metrics from DWS — trace each to BRD metric M-N
+        -- Replace with actual columns from TDD T-11:
+        -- s.total_metric,        -- BRD M-1, link_status: exact
+        -- s.ratio_metric,        -- BRD M-2, link_status: proxy
 
-        -- Metrics from DWS (trace each to TDD)
-        -- s.total_metric_1,        -- TDD metric M-1
-        -- s.ratio_metric,          -- TDD metric M-2
-        -- s.entity_count,          -- TDD metric M-3
-
-        -- Calculated at timestamp
         s.calculated_at
 
     from summary_data s
-    left join date_data dt on s.date_key = dt.date_sk
-    left join dimension_data dim on s.entity_key = dim.entity_sk
+    inner join date_dim dt on s.date_key = dt.date_sk
 )
 
-select * from final
+select
+    calendar_date,
+    day_name,
+    is_business_day,
+    calculated_at
+from final

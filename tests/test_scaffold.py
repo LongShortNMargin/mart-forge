@@ -502,9 +502,14 @@ class TestSignOffDetection:
         doc.write_text("# Doc\nGrade: A\n")
         assert _is_signed(doc)
 
-    def test_approved_is_signed(self, tmp_path):
+    def test_approved_alone_not_signed(self, tmp_path):
         doc = tmp_path / "doc.md"
         doc.write_text("# Doc\nAPPROVED by reviewer.\n")
+        assert not _is_signed(doc)
+
+    def test_grade_a_with_approved_is_signed(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\nAPPROVED by reviewer.\nGrade: A\n")
         assert _is_signed(doc)
 
     def test_grade_b_not_signed(self, tmp_path):
@@ -706,6 +711,106 @@ class TestMetricMappingValidation:
         result = scaffold(mart_dir, "test-mart", "tst")
         assert not result["success"]
         assert any("M-2" in e and "no mapping" in e.lower() for e in result["errors"])
+
+
+class TestContractEnforcement:
+    """Regression tests for Codex review blockers 1-5 (2026-05-24)."""
+
+    def test_rejects_approved_without_grade_a(self, mart_dir):
+        """Blocker 1: Removing Grade: A from both docs (keeping APPROVED) must fail."""
+        mart_dir.mkdir()
+        brd_no_grade = VALID_BRD.replace("Grade: A", "").replace("APPROVED", "APPROVED")
+        tdd_no_grade = VALID_TDD.replace("Grade: A", "").replace("APPROVED", "APPROVED")
+        (mart_dir / "brd.md").write_text(brd_no_grade)
+        (mart_dir / "tdd.md").write_text(tdd_no_grade)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted docs without Grade: A"
+        assert any("not signed off" in e.lower() for e in result["errors"])
+
+    def test_rejects_brd_ref_dash(self, mart_dir):
+        """Blocker 2: Replacing both ADS BRD_ref with '-' must fail."""
+        mart_dir.mkdir()
+        tdd_no_refs = VALID_TDD.replace("| M-2 |", "| - |").replace("| M-1 |", "| - |")
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(tdd_no_refs)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted ADS with all BRD_ref set to '-'"
+        assert any("no mapping" in e.lower() for e in result["errors"])
+
+    def test_rejects_invalid_link_status_bogus(self, mart_dir):
+        """Blocker 3: Invalid link_status 'bogus' in BRD must fail."""
+        mart_dir.mkdir()
+        brd_bogus = VALID_BRD.replace("| M-1 Revenue | native | exact |",
+                                       "| M-1 Revenue | native | bogus |")
+        tdd_bogus = VALID_TDD.replace("| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+                                       "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | bogus |")
+        (mart_dir / "brd.md").write_text(brd_bogus)
+        (mart_dir / "tdd.md").write_text(tdd_bogus)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted invalid link_status 'bogus'"
+        assert any("invalid link_status" in e.lower() for e in result["errors"])
+
+    def test_rejects_invalid_source_type(self, mart_dir):
+        """Blocker 3 extension: Invalid source_type must also fail."""
+        mart_dir.mkdir()
+        brd_bad_st = VALID_BRD.replace("| M-1 Revenue | native | exact |",
+                                        "| M-1 Revenue | magical | exact |")
+        (mart_dir / "brd.md").write_text(brd_bad_st)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted invalid source_type 'magical'"
+        assert any("invalid source_type" in e.lower() for e in result["errors"])
+
+    def test_rejects_unbound_ads_column(self, mart_dir):
+        """Blocker 4: ADS binding column not produced by fixture must fail."""
+        mart_dir.mkdir()
+        tdd_wrong_col = VALID_TDD.replace(
+            "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+            "| case_volume | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(tdd_wrong_col)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted ADS column 'case_volume' not in fixture template"
+        assert any("case_volume" in e for e in result["errors"])
+        assert any("fixture" in e.lower() for e in result["errors"])
+
+    def test_dashboard_chart_contract_bound(self, signed_mart):
+        """Blocker 5: Dashboard trend chart must use contract metrics, not hardcoded columns."""
+        scaffold(signed_mart, "test-mart", "tst")
+        dash = (signed_mart / "dashboard" / "app.py").read_text()
+        assert "Metric Trends" in dash, "Dashboard should show 'Metric Trends' not 'Revenue Trend'"
+        assert "Revenue Trend" not in dash, "Dashboard has hardcoded 'Revenue Trend' header"
+        assert "for metric in CONTRACTED_METRICS" in dash, "Dashboard chart not iterating over contract"
+
+    def test_rejects_empty_ads_column_binding(self, mart_dir):
+        """Blocker 2 extension: ADS column binding of '-' for a mapped metric must fail."""
+        mart_dir.mkdir()
+        tdd_dash_col = VALID_TDD.replace(
+            "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+            "| - | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+        )
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(tdd_dash_col)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"], "Scaffold accepted metric with empty ADS column binding"
+        assert any("empty ads column" in e.lower() for e in result["errors"])
+
+    def test_rejects_tdd_invalid_link_status(self, mart_dir):
+        """Blocker 3 extension: Invalid link_status in TDD T-11 must fail."""
+        mart_dir.mkdir()
+        tdd_bogus = VALID_TDD.replace(
+            "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
+            "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | bogus |",
+        )
+        brd_bogus = VALID_BRD.replace("| M-1 Revenue | native | exact |",
+                                       "| M-1 Revenue | native | bogus |")
+        (mart_dir / "brd.md").write_text(brd_bogus)
+        (mart_dir / "tdd.md").write_text(tdd_bogus)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        errors_text = " ".join(result["errors"])
+        assert "invalid link_status" in errors_text.lower()
 
 
 class TestNameSanitization:

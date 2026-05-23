@@ -126,15 +126,20 @@ def section_metric_cards(ads_df):
 
 
 def section_trend_chart(ads_df):
-    st.header("Revenue Trend")
-    if ads_df is not None and not ads_df.empty and "calendar_date" in ads_df.columns:
-        revenue_cols = [m["ads_column"] for m in CONTRACTED_METRICS if m.get("ads_column") == "daily_revenue"]
-        if revenue_cols and "daily_revenue" in ads_df.columns:
-            st.line_chart(ads_df.set_index("calendar_date")["daily_revenue"])
-        else:
-            st.info("No revenue metric contracted for trend display.")
-    else:
+    st.header("Metric Trends")
+    if ads_df is None or ads_df.empty or "calendar_date" not in ads_df.columns:
         st.info("No trend data available. Run `dbt seed && dbt run` first.")
+        return
+    plotted = False
+    for metric in CONTRACTED_METRICS:
+        col = metric.get("ads_column", "")
+        if col and col in ads_df.columns:
+            st.subheader(f"{metric['name']} ({metric['id']})")
+            render_link_badge(metric.get("link_status", "unsupported"))
+            st.line_chart(ads_df.set_index("calendar_date")[col])
+            plotted = True
+    if not plotted:
+        st.info("No contracted metrics available for trend display.")
 
 
 def section_provenance():

@@ -26,6 +26,10 @@ def main():
     scaffold_parser.add_argument(
         "--prefix", type=str, required=True, help="Model naming prefix (2-4 chars)"
     )
+    scaffold_parser.add_argument(
+        "--fixture", action="store_true", default=False,
+        help="Generate CI smoke-fixture (built-in order/revenue templates) instead of general contract-driven scaffold",
+    )
 
     validate_parser = subparsers.add_parser(
         "validate", help="Validate framework templates and structure"
@@ -45,7 +49,7 @@ def main():
             print(f"Error: directory {mart_path} does not exist.")
             sys.exit(1)
 
-        result = scaffold(mart_path, args.name, args.prefix)
+        result = scaffold(mart_path, args.name, args.prefix, fixture=args.fixture)
         if not result["success"]:
             print("Scaffold REFUSED — hard gate violations:")
             for err in result["errors"]:

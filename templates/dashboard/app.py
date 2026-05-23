@@ -24,6 +24,8 @@ DWS_TABLE = "{prefix}_dws_daily_revenue_1d"
 
 CONTRACTED_METRICS = {contract_metrics}
 
+CONTRACT_VISUALIZATIONS = {contract_visualizations}
+
 LINK_STATUS_LABELS = {
     "exact": ("green", "Exact verification source"),
     "proxy": ("orange", "Advisory comparator (proxy) — not ingestion provenance"),
@@ -130,13 +132,18 @@ def section_trend_chart(ads_df):
     if ads_df is None or ads_df.empty or "calendar_date" not in ads_df.columns:
         st.info("No trend data available. Run `dbt seed && dbt run` first.")
         return
+    metric_by_id = {m["id"]: m for m in CONTRACTED_METRICS}
     plotted = False
-    for metric in CONTRACTED_METRICS:
+    for viz in CONTRACT_VISUALIZATIONS:
+        metric = metric_by_id.get(viz.get("metric_id", ""))
+        if not metric:
+            continue
         col = metric.get("ads_column", "")
         if col and col in ads_df.columns:
-            st.subheader(f"{metric['name']} ({metric['id']})")
+            st.subheader(viz.get("title", f"{metric['name']} ({metric['id']})"))
             render_link_badge(metric.get("link_status", "unsupported"))
-            st.line_chart(ads_df.set_index("calendar_date")[col])
+            chart_fn = st.bar_chart if viz.get("chart_type") == "bar_chart" else st.line_chart
+            chart_fn(ads_df.set_index("calendar_date")[col])
             plotted = True
     if not plotted:
         st.info("No contracted metrics available for trend display.")

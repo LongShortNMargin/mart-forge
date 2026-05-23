@@ -1,17 +1,20 @@
 """
-mart-forge scaffold — Generate a dbt project from a signed BRD/TDD.
+mart-forge scaffold — Generate a dbt project from a signed BRD/TDD and
+implementation contract (mart.yml).
 
 Enforces structural contract validation:
 - BRD must have all mandatory sections (B-1..B-4) with populated metric catalog
 - TDD must have all mandatory sections (T-1..T-17) with per-layer column specs
-- Grade A or explicit APPROVED required; Grade B and below rejected
+- Grade A and proxy stamp required; Grade B and below rejected
 - No unverified link_status at sign-off
 - Each metric must declare valid source_type and resolved link_status
 - Bare heading vocabulary and bare N/A tokens rejected
 - Required layers (ODS/DWD/ADS) must have populated column specs — N/A rejected
 - T-3/T-12/T-14/T-16 must have substantive content (not token text)
 - BRD metric-to-ADS mapping validated for completeness and link_status consistency
-- Produces a contract-bound dbt project with SQL models, DQC assets, and dashboard
+- mart.yml implementation contract required: SQL bindings, metric columns, visualizations
+- Dashboard visualizations bound to signed contract specification
+- Smoke fixture explicitly separated from general domain-neutral scaffold path
 """
 
 import json
@@ -19,6 +22,8 @@ import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+
+import yaml
 
 from mart_forge._resources import get_resource_root
 
@@ -32,14 +37,7 @@ COLUMN_SPEC_FIELDS = [
 
 VALID_SOURCE_TYPES = {"native", "derived", "hybrid"}
 VALID_LINK_STATUSES = {"exact", "proxy", "unsupported"}
-
-MODEL_NAMES = {
-    "ods": "{prefix}_ods_csv_sample",
-    "dim": "{prefix}_dim_date",
-    "dwd": "{prefix}_dwd_daily_sample_di",
-    "dws": "{prefix}_dws_daily_revenue_1d",
-    "ads": "{prefix}_ads_exec_dashboard",
-}
+VALID_CHART_TYPES = {"line_chart", "bar_chart"}
 
 TABLE_SECTIONS = {
     "T-6": {"label": "ODS", "extra": ["Grain", "Incremental Strategy", "Unique Key", "Provenance"]},
@@ -52,13 +50,19 @@ TABLE_SECTIONS = {
 
 REQUIRED_LAYER_SECTIONS = {"T-6", "T-8", "T-11"}
 
-FIXTURE_ADS_METRIC_COLUMNS = {"daily_revenue", "order_count"}
-
 CONTENT_SECTIONS = {
     "T-3": "Table Summary",
     "T-12": "Physical Design",
     "T-14": "DQC Plan",
     "T-16": "Operations",
+}
+
+SMOKE_FIXTURE_LAYERS = {
+    "ods": {"model": "{prefix}_ods_csv_sample", "sql": "sql/ods.sql"},
+    "dim": {"model": "{prefix}_dim_date", "sql": "sql/dim.sql"},
+    "dwd": {"model": "{prefix}_dwd_daily_sample_di", "sql": "sql/dwd.sql"},
+    "dws": {"model": "{prefix}_dws_daily_revenue_1d", "sql": "sql/dws.sql"},
+    "ads": {"model": "{prefix}_ads_exec_dashboard", "sql": "sql/ads.sql"},
 }
 
 
@@ -73,6 +77,13 @@ def _is_signed(doc_path: Path) -> bool:
     if re.search(r"Grade:\s*[BCDF]", content):
         return False
     return bool(re.search(r"Grade:\s*A\b", content))
+
+
+def _has_proxy_stamp(doc_path: Path) -> bool:
+    if not doc_path.exists():
+        return False
+    content = doc_path.read_text()
+    return bool(re.search(r"Proxy:\s*\S+", content))
 
 
 def _extract_section(content: str, label: str, next_label: str | None) -> str:
@@ -202,6 +213,9 @@ def _validate_brd(brd_path: Path) -> list[str]:
     if not _is_signed(brd_path):
         errors.append("BRD exists but is not signed off. Require Grade: A.")
 
+    if not _has_proxy_stamp(brd_path):
+        errors.append("BRD missing proxy approval stamp. Require Proxy: <stamp>.")
+
     for i, section in enumerate(BRD_REQUIRED_SECTIONS):
         if section not in content:
             errors.append(f"BRD missing mandatory section {section}.")
@@ -270,6 +284,9 @@ def _validate_tdd(tdd_path: Path) -> list[str]:
 
     if not _is_signed(tdd_path):
         errors.append("TDD exists but is not signed off. Require Grade: A.")
+
+    if not _has_proxy_stamp(tdd_path):
+        errors.append("TDD missing proxy approval stamp. Require Proxy: <stamp>.")
 
     for section in TDD_REQUIRED_SECTIONS:
         if section not in content:
@@ -388,6 +405,125 @@ def _validate_metric_mapping(brd_path: Path, tdd_path: Path) -> list[str]:
     return errors
 
 
+def _load_mart_yml(mart_dir: Path) -> tuple[dict | None, list[str]]:
+    mart_yml_path = mart_dir / "mart.yml"
+    errors = []
+    if not mart_yml_path.exists():
+        return None, [
+            "mart.yml not found. Create an implementation contract binding "
+            "signed BRD/TDD to SQL templates and dashboard visualizations."
+        ]
+
+    try:
+        data = yaml.safe_load(mart_yml_path.read_text())
+    except yaml.YAMLError as e:
+        return None, [f"mart.yml is not valid YAML: {e}"]
+
+    if not isinstance(data, dict):
+        return None, ["mart.yml must be a YAML mapping."]
+
+    for key in ("version", "layers", "metrics", "dashboard"):
+        if key not in data:
+            errors.append(f"mart.yml missing required key '{key}'.")
+
+    if errors:
+        return None, errors
+
+    layers = data.get("layers", {})
+    if not isinstance(layers, dict):
+        errors.append("mart.yml 'layers' must be a mapping.")
+    else:
+        for layer_key in ("ods", "dim", "dwd", "dws", "ads"):
+            if layer_key not in layers:
+                errors.append(f"mart.yml missing required layer '{layer_key}'.")
+                continue
+            layer = layers[layer_key]
+            if not isinstance(layer, dict):
+                errors.append(f"mart.yml layer '{layer_key}' must be a mapping.")
+                continue
+            if "model" not in layer:
+                errors.append(f"mart.yml layer '{layer_key}' missing 'model' name.")
+            if "sql" not in layer:
+                errors.append(f"mart.yml layer '{layer_key}' missing 'sql' template path.")
+            elif not (mart_dir / layer["sql"]).exists():
+                errors.append(
+                    f"mart.yml layer '{layer_key}' SQL template not found: {layer['sql']}"
+                )
+
+    metrics = data.get("metrics", [])
+    if not isinstance(metrics, list) or len(metrics) == 0:
+        errors.append("mart.yml 'metrics' must be a non-empty list.")
+    else:
+        for m in metrics:
+            if not isinstance(m, dict):
+                errors.append("mart.yml metric entry must be a mapping.")
+                continue
+            if "id" not in m:
+                errors.append("mart.yml metric missing 'id' field.")
+            if "ads_column" not in m:
+                errors.append(f"mart.yml metric {m.get('id', '?')} missing 'ads_column' field.")
+
+    dashboard = data.get("dashboard", {})
+    if not isinstance(dashboard, dict):
+        errors.append("mart.yml 'dashboard' must be a mapping.")
+    else:
+        visualizations = dashboard.get("visualizations", [])
+        if not isinstance(visualizations, list) or len(visualizations) == 0:
+            errors.append("mart.yml dashboard must have at least one visualization.")
+        else:
+            metric_ids = {m.get("id") for m in metrics if isinstance(m, dict)}
+            for viz in visualizations:
+                if not isinstance(viz, dict):
+                    errors.append("mart.yml visualization entry must be a mapping.")
+                    continue
+                if "metric_id" not in viz:
+                    errors.append("mart.yml visualization missing 'metric_id'.")
+                elif viz["metric_id"] not in metric_ids:
+                    errors.append(
+                        f"mart.yml visualization references unknown metric '{viz['metric_id']}'."
+                    )
+                if "chart_type" not in viz:
+                    errors.append("mart.yml visualization missing 'chart_type'.")
+                elif viz["chart_type"] not in VALID_CHART_TYPES:
+                    errors.append(
+                        f"mart.yml visualization has invalid chart_type '{viz['chart_type']}' "
+                        f"— must be one of {sorted(VALID_CHART_TYPES)}."
+                    )
+                if "title" not in viz:
+                    errors.append("mart.yml visualization missing 'title'.")
+
+    return data, errors
+
+
+def _validate_mart_yml_bindings(
+    mart_yml: dict, brd_metrics: list[dict], ads_map: dict,
+) -> list[str]:
+    errors = []
+    yml_metrics = mart_yml.get("metrics", [])
+    brd_ids = {m["id"] for m in brd_metrics}
+    ads_columns = {v.get("column", "") for v in ads_map.values()}
+
+    for m in yml_metrics:
+        mid = m.get("id", "")
+        if mid and mid not in brd_ids:
+            errors.append(f"mart.yml metric '{mid}' not found in BRD B-3 metric catalog.")
+        ads_col = m.get("ads_column", "")
+        if ads_col and ads_col not in ads_columns:
+            errors.append(
+                f"mart.yml metric '{mid}' ads_column '{ads_col}' "
+                f"not found in TDD T-11 ADS column spec."
+            )
+
+    yml_ids = {m.get("id") for m in yml_metrics}
+    for m in brd_metrics:
+        if m["id"] not in yml_ids:
+            errors.append(
+                f"BRD metric {m['id']} ({m['name']}) has no binding in mart.yml."
+            )
+
+    return errors
+
+
 def _check_gates(mart_dir: Path) -> list[str]:
     errors = []
     brd_path = mart_dir / "brd.md"
@@ -396,60 +532,57 @@ def _check_gates(mart_dir: Path) -> list[str]:
     errors.extend(_validate_tdd(tdd_path))
     if brd_path.exists() and tdd_path.exists():
         errors.extend(_validate_metric_mapping(brd_path, tdd_path))
+
+    mart_yml, yml_errors = _load_mart_yml(mart_dir)
+    errors.extend(yml_errors)
+
+    if mart_yml and brd_path.exists() and tdd_path.exists():
+        brd_metrics = _parse_brd_metrics(brd_path)
+        ads_map = _parse_ads_metric_map(tdd_path)
+        errors.extend(_validate_mart_yml_bindings(mart_yml, brd_metrics, ads_map))
+
     return errors
 
 
 def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
-    """Generate a runnable dbt project skeleton in mart_dir."""
+    """Generate a runnable dbt project from signed BRD/TDD and mart.yml contract."""
     gate_errors = _check_gates(mart_dir)
     if gate_errors:
         return {"success": False, "errors": gate_errors, "files_created": []}
 
-    resource_root = get_resource_root()
-    templates_dir = resource_root / "templates"
-    scripts_dir = resource_root / "scripts"
+    mart_yml, _ = _load_mart_yml(mart_dir)
+    scripts_dir = get_resource_root() / "scripts"
     files_created = []
-
     safe_name = _sanitize_name(mart_name)
 
     brd_metrics = _parse_brd_metrics(mart_dir / "brd.md")
     ads_map = _parse_ads_metric_map(mart_dir / "tdd.md")
+    layers = mart_yml["layers"]
+    yml_metrics = mart_yml["metrics"]
+    visualizations = mart_yml["dashboard"]["visualizations"]
+
     contract_metrics = []
     for m in brd_metrics:
         mid = m["id"]
         ads_info = ads_map.get(mid, {})
+        yml_entry = next((ym for ym in yml_metrics if ym["id"] == mid), {})
         contract_metrics.append({
             "id": mid,
             "name": m["name"],
             "source_type": m["source_type"],
             "link_status": m["link_status"],
-            "ads_column": ads_info.get("column", ""),
+            "ads_column": yml_entry.get("ads_column", ads_info.get("column", "")),
         })
 
-    for m in contract_metrics:
-        ads_col = m.get("ads_column", "")
-        if ads_col and ads_col not in FIXTURE_ADS_METRIC_COLUMNS:
-            return {
-                "success": False,
-                "errors": [
-                    f"Contract metric {m['id']} binds to ADS column '{ads_col}' "
-                    f"which is not produced by the fixture template. The fixture "
-                    f"generates columns {sorted(FIXTURE_ADS_METRIC_COLUMNS)}. "
-                    f"Arbitrary domain scaffolding requires a validated implementation "
-                    f"contract (not yet supported at Phase F)."
-                ],
-                "files_created": [],
-            }
-
+    is_fixture = mart_yml.get("fixture", {}).get("enabled", False)
     contract = {
         "mart": {"name": mart_name, "prefix": prefix, "version": "1.0"},
         "metrics": contract_metrics,
-        "fixture": {
-            "enabled": True,
-            "seed_domain": "order-revenue",
-            "note": "CI smoke data only — replace with domain seeds for production",
-        },
+        "visualizations": visualizations,
     }
+    if is_fixture:
+        contract["fixture"] = mart_yml["fixture"]
+
     contract_path = mart_dir / "mart_contract.json"
     contract_path.write_text(json.dumps(contract, indent=2))
     files_created.append("mart_contract.json")
@@ -487,32 +620,33 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     )
     files_created.append("profiles.yml")
 
-    # Model SQL files — render templates with {prefix} substitution
-    for layer, model_pattern in MODEL_NAMES.items():
-        layer_dir = mart_dir / "models" / layer
+    # Model SQL files — read from mart.yml-specified templates
+    for layer_key, layer_spec in layers.items():
+        layer_dir = mart_dir / "models" / layer_key
         layer_dir.mkdir(parents=True, exist_ok=True)
-        template_sql = templates_dir / "models" / layer / "template.sql"
-        if template_sql.exists():
-            content = template_sql.read_text()
+        sql_path = mart_dir / layer_spec["sql"]
+        if sql_path.exists():
+            content = sql_path.read_text()
             content = content.replace("{prefix}", prefix)
-            model_name = model_pattern.replace("{prefix}", prefix)
+            model_name = layer_spec["model"].replace("{prefix}", prefix)
             target_file = layer_dir / f"{model_name}.sql"
             target_file.write_text(content)
-            files_created.append(f"models/{layer}/{model_name}.sql")
+            files_created.append(f"models/{layer_key}/{model_name}.sql")
 
-    # Seeds — both raw_sample_data and dim_date
+    # Seeds — copy from mart.yml seeds or create empty dir
     seeds_dir = mart_dir / "seeds"
     seeds_dir.mkdir(exist_ok=True)
-    for seed_name in ["raw_sample_data.csv", "dim_date.csv"]:
-        seed_src = templates_dir / "seeds" / seed_name
-        if seed_src.exists():
-            shutil.copy2(seed_src, seeds_dir / seed_name)
-            files_created.append(f"seeds/{seed_name}")
+    yml_seeds = mart_yml.get("seeds", [])
+    for seed_spec in yml_seeds:
+        seed_file = mart_dir / seed_spec["file"]
+        if seed_file.exists() and seed_file.parent != seeds_dir:
+            shutil.copy2(seed_file, seeds_dir / seed_file.name)
+        files_created.append(f"seeds/{seed_file.name}")
 
     # Tests directory with runnable singular test
     tests_dir = mart_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
-    ods_model = MODEL_NAMES["ods"].replace("{prefix}", prefix)
+    ods_model = layers["ods"]["model"].replace("{prefix}", prefix)
     test_content = (
         f"-- Validates: no duplicate primary keys in ODS (record_id + pull_date)\n"
         f"-- Control class: Duplicate Detection\n"
@@ -529,87 +663,45 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     test_file.write_text(test_content)
     files_created.append(f"tests/test_{prefix}_ods_no_duplicate_keys.sql")
 
-    # schema.yml with all models and generic tests
+    # schema.yml — generated from mart.yml model names and metric columns
     schema = mart_dir / "models" / "schema.yml"
-    dwd_model = MODEL_NAMES["dwd"].replace("{prefix}", prefix)
-    dim_model = MODEL_NAMES["dim"].replace("{prefix}", prefix)
-    dws_model = MODEL_NAMES["dws"].replace("{prefix}", prefix)
-    ads_model = MODEL_NAMES["ads"].replace("{prefix}", prefix)
-    schema.write_text(
-        f"version: 2\n\n"
-        f"models:\n"
-        f"  - name: {ods_model}\n"
-        f"    description: 'ODS layer — raw ingestion from sample CSV'\n"
-        f"    columns:\n"
-        f"      - name: record_id\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"      - name: pull_date\n"
-        f"        data_tests:\n"
-        f"          - not_null\n\n"
-        f"  - name: {dim_model}\n"
-        f"    description: 'Date dimension (seed-backed)'\n"
-        f"    columns:\n"
-        f"      - name: date_sk\n"
-        f"        data_tests:\n"
-        f"          - not_null\n\n"
-        f"  - name: {dwd_model}\n"
-        f"    description: 'DWD fact — daily order line detail'\n"
-        f"    columns:\n"
-        f"      - name: order_line_sk\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"          - unique\n"
-        f"      - name: date_key\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"          - relationships:\n"
-        f"              arguments:\n"
-        f"                to: ref('{dim_model}')\n"
-        f"                field: date_sk\n\n"
-        f"  - name: {dws_model}\n"
-        f"    description: 'DWS — daily revenue aggregation'\n"
-        f"    columns:\n"
-        f"      - name: date_key\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"      - name: order_count\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"      - name: daily_revenue\n"
-        f"        data_tests:\n"
-        f"          - not_null\n\n"
-        f"  - name: {ads_model}\n"
-        f"    description: 'ADS — executive dashboard OBT'\n"
-        f"    columns:\n"
-        f"      - name: calendar_date\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"      - name: order_count\n"
-        f"        data_tests:\n"
-        f"          - not_null\n"
-        f"      - name: daily_revenue\n"
-        f"        data_tests:\n"
-        f"          - not_null\n\n"
-        f"seeds:\n"
-        f"  - name: raw_sample_data\n"
-        f"    description: 'Sample order data for fixture/demo'\n"
-        f"  - name: dim_date\n"
-        f"    description: 'Calendar seed with business day flags'\n"
-    )
+    schema_lines = ["version: 2\n", "models:"]
+    for layer_key in ("ods", "dim", "dwd", "dws", "ads"):
+        model_name = layers[layer_key]["model"].replace("{prefix}", prefix)
+        schema_lines.append(f"  - name: {model_name}")
+        if layer_key == "ads":
+            schema_lines.append(f"    description: 'ADS — executive dashboard OBT'")
+            schema_lines.append(f"    columns:")
+            for cm in contract_metrics:
+                schema_lines.append(f"      - name: {cm['ads_column']}")
+                schema_lines.append(f"        data_tests:")
+                schema_lines.append(f"          - not_null")
+        else:
+            schema_lines.append(f"    description: '{layer_key.upper()} layer'")
+    schema_lines.append("")
+    if yml_seeds:
+        schema_lines.append("seeds:")
+        for seed_spec in yml_seeds:
+            schema_lines.append(f"  - name: {seed_spec['name']}")
+            schema_lines.append(f"    description: 'Seed data'")
+    schema.write_text("\n".join(schema_lines) + "\n")
     files_created.append("models/schema.yml")
 
-    # Dashboard — render template with contract metrics injection
+    # Dashboard — render template with contract metrics + visualizations
     dash_dir = mart_dir / "dashboard"
     dash_dir.mkdir(exist_ok=True)
-    dash_template = templates_dir / "dashboard" / "app.py"
+    dash_template = get_resource_root() / "templates" / "dashboard" / "app.py"
     if dash_template.exists():
         dash_content = dash_template.read_text()
         dash_content = dash_content.replace("{mart_name}", mart_name)
         dash_content = dash_content.replace("{prefix}", prefix)
         dash_content = dash_content.replace("{db_name}", safe_name)
-        contract_metrics_str = json.dumps(contract_metrics, indent=4)
-        dash_content = dash_content.replace("{contract_metrics}", contract_metrics_str)
+        dash_content = dash_content.replace(
+            "{contract_metrics}", json.dumps(contract_metrics, indent=4),
+        )
+        dash_content = dash_content.replace(
+            "{contract_visualizations}", json.dumps(visualizations, indent=4),
+        )
         (dash_dir / "app.py").write_text(dash_content)
     files_created.append("dashboard/app.py")
 
@@ -641,7 +733,7 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     # CI pipeline
     ci_dir = mart_dir / ".github" / "workflows"
     ci_dir.mkdir(parents=True, exist_ok=True)
-    pipeline_src = templates_dir / "pipeline" / "daily.yml.template"
+    pipeline_src = get_resource_root() / "templates" / "pipeline" / "daily.yml.template"
     if pipeline_src.exists():
         content = pipeline_src.read_text()
         content = content.replace("{Mart Name}", mart_name)
@@ -654,3 +746,55 @@ def scaffold(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     (mart_dir / "analyses").mkdir(exist_ok=True)
 
     return {"success": True, "errors": [], "files_created": files_created}
+
+
+def scaffold_smoke_fixture(mart_dir: Path, mart_name: str, prefix: str) -> dict:
+    """Generate the order/revenue smoke fixture for CI testing.
+
+    Copies the framework's built-in SQL templates and seeds, generates a
+    mart.yml implementation contract for the fixture domain, then delegates
+    to scaffold() for the actual project generation.
+    """
+    resource_root = get_resource_root()
+    templates_dir = resource_root / "templates"
+
+    sql_dir = mart_dir / "sql"
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    for layer in ("ods", "dim", "dwd", "dws", "ads"):
+        src = templates_dir / "models" / layer / "template.sql"
+        if src.exists():
+            shutil.copy2(src, sql_dir / f"{layer}.sql")
+
+    seeds_dir = mart_dir / "seeds"
+    seeds_dir.mkdir(exist_ok=True)
+    for seed_name in ("raw_sample_data.csv", "dim_date.csv"):
+        src = templates_dir / "seeds" / seed_name
+        if src.exists():
+            shutil.copy2(src, seeds_dir / seed_name)
+
+    mart_yml = {
+        "version": "1.0",
+        "layers": dict(SMOKE_FIXTURE_LAYERS),
+        "metrics": [
+            {"id": "M-1", "ads_column": "daily_revenue"},
+            {"id": "M-2", "ads_column": "order_count"},
+        ],
+        "seeds": [
+            {"name": "raw_sample_data", "file": "seeds/raw_sample_data.csv"},
+            {"name": "dim_date", "file": "seeds/dim_date.csv"},
+        ],
+        "dashboard": {
+            "visualizations": [
+                {"metric_id": "M-1", "chart_type": "line_chart", "title": "Revenue Trend"},
+                {"metric_id": "M-2", "chart_type": "line_chart", "title": "Order Volume"},
+            ],
+        },
+        "fixture": {
+            "enabled": True,
+            "seed_domain": "order-revenue",
+            "note": "CI smoke data only — replace with domain seeds for production",
+        },
+    }
+    (mart_dir / "mart.yml").write_text(yaml.dump(mart_yml, default_flow_style=False))
+
+    return scaffold(mart_dir, mart_name, prefix)

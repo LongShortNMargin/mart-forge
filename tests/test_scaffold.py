@@ -1,17 +1,28 @@
 """Scaffold workflow tests.
 
 Tests structural contract validation, rejection of incomplete/undergraded
-BRD/TDD, name sanitization, and generation of a complete runnable dbt
-skeleton with SQL models, DQC assets, dashboard, and pipeline scripts.
+BRD/TDD, name sanitization, proxy stamp enforcement, mart.yml contract
+validation, smoke fixture separation, and generation of a complete runnable
+dbt skeleton with SQL models, DQC assets, dashboard, and pipeline scripts.
 """
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
-from mart_forge.scaffold import scaffold, _is_signed, _validate_brd, _validate_tdd
+from mart_forge._resources import get_resource_root
+from mart_forge.scaffold import (
+    _has_proxy_stamp,
+    _is_signed,
+    _validate_brd,
+    _validate_tdd,
+    scaffold,
+    scaffold_smoke_fixture,
+)
 
 
 VALID_BRD = """\
@@ -44,6 +55,7 @@ This mart covers order processing for the generic test domain.
 
 Sign-off: APPROVED
 Grade: A
+Proxy: Argent-approved
 """
 
 VALID_TDD = """\
@@ -149,7 +161,54 @@ No external data sources for reconciliation.
 
 Sign-off: APPROVED
 Grade: A
+Proxy: Argent-approved
 """
+
+
+def _setup_mart_contract(mart_dir, prefix="tst"):
+    """Create mart.yml, SQL templates, and seed files for a test fixture."""
+    resource_root = get_resource_root()
+    templates_dir = resource_root / "templates"
+
+    sql_dir = mart_dir / "sql"
+    sql_dir.mkdir(exist_ok=True)
+    for layer in ("ods", "dim", "dwd", "dws", "ads"):
+        src = templates_dir / "models" / layer / "template.sql"
+        if src.exists():
+            shutil.copy2(src, sql_dir / f"{layer}.sql")
+
+    seeds_dir = mart_dir / "seeds"
+    seeds_dir.mkdir(exist_ok=True)
+    for seed_name in ("raw_sample_data.csv", "dim_date.csv"):
+        src = templates_dir / "seeds" / seed_name
+        if src.exists():
+            shutil.copy2(src, seeds_dir / seed_name)
+
+    mart_yml = {
+        "version": "1.0",
+        "layers": {
+            "ods": {"model": f"{prefix}_ods_csv_sample", "sql": "sql/ods.sql"},
+            "dim": {"model": f"{prefix}_dim_date", "sql": "sql/dim.sql"},
+            "dwd": {"model": f"{prefix}_dwd_daily_sample_di", "sql": "sql/dwd.sql"},
+            "dws": {"model": f"{prefix}_dws_daily_revenue_1d", "sql": "sql/dws.sql"},
+            "ads": {"model": f"{prefix}_ads_exec_dashboard", "sql": "sql/ads.sql"},
+        },
+        "metrics": [
+            {"id": "M-1", "ads_column": "daily_revenue"},
+            {"id": "M-2", "ads_column": "order_count"},
+        ],
+        "seeds": [
+            {"name": "raw_sample_data", "file": "seeds/raw_sample_data.csv"},
+            {"name": "dim_date", "file": "seeds/dim_date.csv"},
+        ],
+        "dashboard": {
+            "visualizations": [
+                {"metric_id": "M-1", "chart_type": "line_chart", "title": "Revenue Trend"},
+                {"metric_id": "M-2", "chart_type": "line_chart", "title": "Order Volume"},
+            ],
+        },
+    }
+    (mart_dir / "mart.yml").write_text(yaml.dump(mart_yml, default_flow_style=False))
 
 
 @pytest.fixture
@@ -162,6 +221,7 @@ def signed_mart(mart_dir):
     mart_dir.mkdir()
     (mart_dir / "brd.md").write_text(VALID_BRD)
     (mart_dir / "tdd.md").write_text(VALID_TDD)
+    _setup_mart_contract(mart_dir)
     return mart_dir
 
 
@@ -171,7 +231,7 @@ class TestPlaceholderRejection:
     def test_rejects_token_only_brd(self, mart_dir):
         mart_dir.mkdir()
         (mart_dir / "brd.md").write_text(
-            "# BRD\n\nSign-off: APPROVED\nGrade: A\n"
+            "# BRD\n\nSign-off: APPROVED\nGrade: A\nProxy: Argent-approved\n"
         )
         (mart_dir / "tdd.md").write_text(VALID_TDD)
         result = scaffold(mart_dir, "test-mart", "tst")
@@ -182,7 +242,7 @@ class TestPlaceholderRejection:
         mart_dir.mkdir()
         (mart_dir / "brd.md").write_text(VALID_BRD)
         (mart_dir / "tdd.md").write_text(
-            "# TDD\n\nSign-off: APPROVED\nGrade: A\n"
+            "# TDD\n\nSign-off: APPROVED\nGrade: A\nProxy: Argent-approved\n"
         )
         result = scaffold(mart_dir, "test-mart", "tst")
         assert not result["success"], "Scaffold accepted a token-only TDD"
@@ -191,7 +251,8 @@ class TestPlaceholderRejection:
     def test_rejects_partial_brd_missing_sections(self, mart_dir):
         mart_dir.mkdir()
         (mart_dir / "brd.md").write_text(
-            "# BRD\n\n## B-1. Scope\nSome scope text here.\n\nSign-off: APPROVED\nGrade: A\n"
+            "# BRD\n\n## B-1. Scope\nSome scope text here.\n\n"
+            "Sign-off: APPROVED\nGrade: A\nProxy: Argent-approved\n"
         )
         (mart_dir / "tdd.md").write_text(VALID_TDD)
         result = scaffold(mart_dir, "test-mart", "tst")
@@ -267,7 +328,7 @@ class TestBareContentRejection:
             "## B-2\n\n"
             "## B-3\n\n"
             "## B-4\n\n"
-            "Sign-off: APPROVED\nGrade: A\n"
+            "Sign-off: APPROVED\nGrade: A\nProxy: Argent-approved\n"
         )
         (mart_dir / "brd.md").write_text(bare_brd)
         (mart_dir / "tdd.md").write_text(VALID_TDD)
@@ -531,6 +592,43 @@ class TestSignOffDetection:
         assert not _is_signed(tmp_path / "nonexistent.md")
 
 
+class TestProxyStamp:
+    """Proxy approval stamp (G-SPEC 8.6) is required on both BRD and TDD."""
+
+    def test_has_proxy_stamp(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\nGrade: A\nProxy: Argent-approved\n")
+        assert _has_proxy_stamp(doc)
+
+    def test_missing_proxy_stamp(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\nGrade: A\n")
+        assert not _has_proxy_stamp(doc)
+
+    def test_nonexistent_doc(self, tmp_path):
+        assert not _has_proxy_stamp(tmp_path / "nonexistent.md")
+
+    def test_rejects_brd_without_proxy(self, mart_dir):
+        mart_dir.mkdir()
+        brd_no_proxy = VALID_BRD.replace("Proxy: Argent-approved\n", "")
+        (mart_dir / "brd.md").write_text(brd_no_proxy)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        _setup_mart_contract(mart_dir)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("proxy" in e.lower() and "brd" in e.lower() for e in result["errors"])
+
+    def test_rejects_tdd_without_proxy(self, mart_dir):
+        mart_dir.mkdir()
+        tdd_no_proxy = VALID_TDD.replace("Proxy: Argent-approved\n", "")
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(tdd_no_proxy)
+        _setup_mart_contract(mart_dir)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("proxy" in e.lower() and "tdd" in e.lower() for e in result["errors"])
+
+
 class TestDesignBypassRejection:
     """Exact negative regression: long N/A prose for required layers,
     empty ADS column header, and token text for T-12/T-16 must be rejected."""
@@ -696,6 +794,12 @@ class TestContractBinding:
         assert "render_error_badge" in dash
         assert "Data unavailable" in dash
 
+    def test_contract_visualizations_embedded(self, signed_mart):
+        scaffold(signed_mart, "test-mart", "tst")
+        dash = (signed_mart / "dashboard" / "app.py").read_text()
+        assert "CONTRACT_VISUALIZATIONS" in dash
+        assert "line_chart" in dash
+
 
 class TestMetricMappingValidation:
     """BRD metrics must map to ADS columns with consistent link_status."""
@@ -762,7 +866,7 @@ class TestContractEnforcement:
         assert any("invalid source_type" in e.lower() for e in result["errors"])
 
     def test_rejects_unbound_ads_column(self, mart_dir):
-        """Blocker 4: ADS binding column not produced by fixture must fail."""
+        """Blocker 4: ADS column in mart.yml not matching TDD T-11 must fail."""
         mart_dir.mkdir()
         tdd_wrong_col = VALID_TDD.replace(
             "| daily_revenue | DECIMAL | Daily revenue | 325.75 | dws.daily_revenue via join | DWS | M-1 | exact |",
@@ -770,18 +874,18 @@ class TestContractEnforcement:
         )
         (mart_dir / "brd.md").write_text(VALID_BRD)
         (mart_dir / "tdd.md").write_text(tdd_wrong_col)
+        _setup_mart_contract(mart_dir)
         result = scaffold(mart_dir, "test-mart", "tst")
-        assert not result["success"], "Scaffold accepted ADS column 'case_volume' not in fixture template"
-        assert any("case_volume" in e for e in result["errors"])
-        assert any("fixture" in e.lower() for e in result["errors"])
+        assert not result["success"], "Scaffold accepted ADS column not matching TDD T-11"
+        assert any("daily_revenue" in e and "not found" in e.lower() for e in result["errors"])
 
     def test_dashboard_chart_contract_bound(self, signed_mart):
-        """Blocker 5: Dashboard trend chart must use contract metrics, not hardcoded columns."""
+        """Blocker 5: Dashboard trend chart must use contract visualizations, not hardcoded columns."""
         scaffold(signed_mart, "test-mart", "tst")
         dash = (signed_mart / "dashboard" / "app.py").read_text()
-        assert "Metric Trends" in dash, "Dashboard should show 'Metric Trends' not 'Revenue Trend'"
-        assert "Revenue Trend" not in dash, "Dashboard has hardcoded 'Revenue Trend' header"
-        assert "for metric in CONTRACTED_METRICS" in dash, "Dashboard chart not iterating over contract"
+        assert "Metric Trends" in dash
+        assert "CONTRACT_VISUALIZATIONS" in dash
+        assert "for viz in CONTRACT_VISUALIZATIONS" in dash
 
     def test_rejects_empty_ads_column_binding(self, mart_dir):
         """Blocker 2 extension: ADS column binding of '-' for a mapped metric must fail."""
@@ -811,6 +915,153 @@ class TestContractEnforcement:
         assert not result["success"]
         errors_text = " ".join(result["errors"])
         assert "invalid link_status" in errors_text.lower()
+
+
+class TestMartYmlValidation:
+    """mart.yml implementation contract must be present and structurally valid."""
+
+    def test_rejects_missing_mart_yml(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("mart.yml not found" in e for e in result["errors"])
+
+    def test_rejects_invalid_yaml(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        (mart_dir / "mart.yml").write_text("{ invalid yaml: [")
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("not valid YAML" in e for e in result["errors"])
+
+    def test_rejects_missing_required_keys(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        (mart_dir / "mart.yml").write_text(yaml.dump({"version": "1.0"}))
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("missing required key" in e for e in result["errors"])
+
+    def test_rejects_missing_sql_template(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        mart_yml = {
+            "version": "1.0",
+            "layers": {
+                "ods": {"model": "tst_ods", "sql": "sql/ods.sql"},
+                "dim": {"model": "tst_dim", "sql": "sql/dim.sql"},
+                "dwd": {"model": "tst_dwd", "sql": "sql/dwd.sql"},
+                "dws": {"model": "tst_dws", "sql": "sql/dws.sql"},
+                "ads": {"model": "tst_ads", "sql": "sql/ads.sql"},
+            },
+            "metrics": [
+                {"id": "M-1", "ads_column": "daily_revenue"},
+                {"id": "M-2", "ads_column": "order_count"},
+            ],
+            "dashboard": {
+                "visualizations": [
+                    {"metric_id": "M-1", "chart_type": "line_chart", "title": "Rev"},
+                    {"metric_id": "M-2", "chart_type": "line_chart", "title": "Cnt"},
+                ],
+            },
+        }
+        (mart_dir / "mart.yml").write_text(yaml.dump(mart_yml, default_flow_style=False))
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("SQL template not found" in e for e in result["errors"])
+
+    def test_rejects_invalid_chart_type(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        _setup_mart_contract(mart_dir)
+        yml = yaml.safe_load((mart_dir / "mart.yml").read_text())
+        yml["dashboard"]["visualizations"][0]["chart_type"] = "pie_chart"
+        (mart_dir / "mart.yml").write_text(yaml.dump(yml, default_flow_style=False))
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("invalid chart_type" in e.lower() for e in result["errors"])
+
+    def test_rejects_unbound_visualization_metric(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        _setup_mart_contract(mart_dir)
+        yml = yaml.safe_load((mart_dir / "mart.yml").read_text())
+        yml["dashboard"]["visualizations"].append(
+            {"metric_id": "M-99", "chart_type": "line_chart", "title": "Unknown"}
+        )
+        (mart_dir / "mart.yml").write_text(yaml.dump(yml, default_flow_style=False))
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("M-99" in e for e in result["errors"])
+
+    def test_rejects_missing_metric_binding(self, mart_dir):
+        """All BRD metrics must have bindings in mart.yml."""
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        _setup_mart_contract(mart_dir)
+        yml = yaml.safe_load((mart_dir / "mart.yml").read_text())
+        yml["metrics"] = [{"id": "M-1", "ads_column": "daily_revenue"}]
+        (mart_dir / "mart.yml").write_text(yaml.dump(yml, default_flow_style=False))
+        result = scaffold(mart_dir, "test-mart", "tst")
+        assert not result["success"]
+        assert any("M-2" in e and "no binding" in e.lower() for e in result["errors"])
+
+
+class TestSmokeFixture:
+    """scaffold_smoke_fixture() explicitly separates the fixture path."""
+
+    def test_smoke_fixture_succeeds(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        result = scaffold_smoke_fixture(mart_dir, "test-mart", "tst")
+        assert result["success"], f"Smoke fixture failed: {result['errors']}"
+
+    def test_smoke_fixture_generates_mart_yml(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        scaffold_smoke_fixture(mart_dir, "test-mart", "tst")
+        assert (mart_dir / "mart.yml").exists()
+        yml = yaml.safe_load((mart_dir / "mart.yml").read_text())
+        assert "layers" in yml
+        assert "metrics" in yml
+        assert "dashboard" in yml
+        assert yml.get("fixture", {}).get("enabled") is True
+
+    def test_smoke_fixture_creates_models(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        result = scaffold_smoke_fixture(mart_dir, "test-mart", "tst")
+        assert result["success"]
+        for layer in ("ods", "dim", "dwd", "dws", "ads"):
+            assert (mart_dir / "models" / layer).exists(), f"Missing model dir: {layer}"
+
+    def test_smoke_fixture_copies_seeds(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        result = scaffold_smoke_fixture(mart_dir, "test-mart", "tst")
+        assert result["success"]
+        assert (mart_dir / "seeds" / "raw_sample_data.csv").exists()
+        assert (mart_dir / "seeds" / "dim_date.csv").exists()
+
+    def test_smoke_fixture_contract_marks_fixture(self, mart_dir):
+        mart_dir.mkdir()
+        (mart_dir / "brd.md").write_text(VALID_BRD)
+        (mart_dir / "tdd.md").write_text(VALID_TDD)
+        scaffold_smoke_fixture(mart_dir, "test-mart", "tst")
+        contract = json.loads((mart_dir / "mart_contract.json").read_text())
+        assert contract.get("fixture", {}).get("enabled") is True
 
 
 class TestNameSanitization:

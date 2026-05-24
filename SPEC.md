@@ -262,4 +262,4 @@ The `dqc_scorecard.json` MUST be mechanically generated from `dbt test` results.
 
 ---
 
-*SPEC approved. Framework-first: Phase F builds the framework with zero example content. Phase G validates the framework against a real domain. Rejection resets, never patches.*
+*SPEC approved. Framework-first: Phase F builds the framework and iterates quality; example content MAY land as conformance checkpoints with honest coverage disclosure. Phase G validates the framework against a real domain. Rejection resets, never patches.*

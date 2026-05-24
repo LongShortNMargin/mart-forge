@@ -1,11 +1,10 @@
 """GME Options Mart — Public Analytics Dashboard.
 
 Connects to MotherDuck gme_db for live public GME options analytics.
-Queries ONLY public analytical tables. No operator positions or private data.
+Queries ONLY allowlisted public analytical tables with explicit columns.
 """
 
 import os
-import sys
 
 import duckdb
 import pandas as pd
@@ -17,8 +16,17 @@ st.set_page_config(page_title="GME Options Mart — Public Analytics", layout="w
 MOTHERDUCK_TOKEN = os.environ.get("MOTHERDUCK_TOKEN")
 DATABASE = "md:gme_db"
 
-PUBLIC_TABLES = ["gme_dws_daily_snapshot_1d", "gme_dws_strike_gex_1d"]
-FORBIDDEN_TABLES = ["gme_dws_warrant_monitor_1d"]
+PUBLIC_TABLES = {"gme_dws_daily_snapshot_1d", "gme_dws_strike_gex_1d"}
+
+SNAPSHOT_COLUMNS = [
+    "pull_date", "spot", "max_pain_strike", "max_pain_convergence_pct",
+    "pc_ratio", "net_gex", "provider", "pull_ts_utc",
+]
+
+GEX_COLUMNS = [
+    "pull_date", "strike", "expiry", "series_type", "dte",
+    "call_gex", "put_gex", "net_gex", "total_oi", "avg_iv", "gex_rank",
+]
 
 PUBLIC_METRIC_CATALOG = [
     {"id": "M-01", "name": "Spot Price", "source_type": "native", "link_status": "exact", "verification": "pending_verification"},
@@ -28,7 +36,7 @@ PUBLIC_METRIC_CATALOG = [
     {"id": "M-05", "name": "Net GEX", "source_type": "derived", "link_status": "proxy", "verification": "pending_verification"},
     {"id": "M-06", "name": "Call GEX by Strike", "source_type": "derived", "link_status": "unsupported", "verification": "pending_verification"},
     {"id": "M-07", "name": "Put GEX by Strike", "source_type": "derived", "link_status": "unsupported", "verification": "pending_verification"},
-    {"id": "M-08", "name": "IV (avg)", "source_type": "native", "link_status": "proxy", "verification": "pending_verification"},
+    {"id": "M-08", "name": "IV (Implied Volatility avg)", "source_type": "native", "link_status": "proxy", "verification": "pending_verification"},
     {"id": "M-09", "name": "IV Percentile", "source_type": "derived", "link_status": "proxy", "verification": "pending_verification"},
     {"id": "M-10", "name": "OI by Strike", "source_type": "native", "link_status": "proxy", "verification": "pending_verification"},
 ]
@@ -43,10 +51,17 @@ def get_connection():
         return None
 
 
-def safe_query(con, sql: str) -> pd.DataFrame:
-    for table in FORBIDDEN_TABLES:
-        if table in sql.lower():
-            raise ValueError(f"Query blocked: references forbidden table {table}")
+def safe_query(con, table: str, columns: list[str], where: str = "", order: str = "", limit: int = 0) -> pd.DataFrame:
+    if table not in PUBLIC_TABLES:
+        return pd.DataFrame()
+    col_list = ", ".join(columns)
+    sql = f"SELECT {col_list} FROM {table}"
+    if where:
+        sql += f" WHERE {where}"
+    if order:
+        sql += f" ORDER BY {order}"
+    if limit:
+        sql += f" LIMIT {limit}"
     try:
         return con.execute(sql).fetchdf()
     except Exception:
@@ -54,52 +69,50 @@ def safe_query(con, sql: str) -> pd.DataFrame:
 
 
 def load_snapshot(con) -> pd.DataFrame:
-    return safe_query(con, """
-        SELECT *
-        FROM gme_dws_daily_snapshot_1d
-        ORDER BY pull_date DESC
-        LIMIT 30
-    """)
+    return safe_query(
+        con, "gme_dws_daily_snapshot_1d", SNAPSHOT_COLUMNS,
+        order="pull_date DESC", limit=30,
+    )
 
 
 def load_gex_latest(con) -> pd.DataFrame:
-    return safe_query(con, """
-        SELECT *
-        FROM gme_dws_strike_gex_1d
-        WHERE pull_date = (SELECT MAX(pull_date) FROM gme_dws_strike_gex_1d)
-        ORDER BY gex_rank
-        LIMIT 20
-    """)
+    return safe_query(
+        con, "gme_dws_strike_gex_1d", GEX_COLUMNS,
+        where="pull_date = (SELECT MAX(pull_date) FROM gme_dws_strike_gex_1d)",
+        order="gex_rank", limit=20,
+    )
 
 
 def load_gex_top5(con) -> pd.DataFrame:
-    return safe_query(con, """
-        SELECT *
-        FROM gme_dws_strike_gex_1d
-        WHERE pull_date = (SELECT MAX(pull_date) FROM gme_dws_strike_gex_1d)
-          AND gex_rank <= 5
-        ORDER BY gex_rank
-    """)
+    return safe_query(
+        con, "gme_dws_strike_gex_1d", GEX_COLUMNS,
+        where="pull_date = (SELECT MAX(pull_date) FROM gme_dws_strike_gex_1d) AND gex_rank <= 5",
+        order="gex_rank",
+    )
 
 
 def load_iv_history(con) -> pd.DataFrame:
-    return safe_query(con, """
-        WITH daily_avg_iv AS (
+    try:
+        sql = f"""
+            WITH daily_avg_iv AS (
+                SELECT
+                    pull_date,
+                    AVG(avg_iv) AS mean_iv
+                FROM gme_dws_strike_gex_1d
+                WHERE series_type = 'MONTHLY'
+                GROUP BY pull_date
+            )
             SELECT
                 pull_date,
-                AVG(avg_iv) AS mean_iv
-            FROM gme_dws_strike_gex_1d
-            WHERE series_type = 'MONTHLY'
-            GROUP BY pull_date
-        )
-        SELECT
-            pull_date,
-            mean_iv,
-            PERCENT_RANK() OVER (ORDER BY mean_iv) AS iv_percentile
-        FROM daily_avg_iv
-        ORDER BY pull_date DESC
-        LIMIT 60
-    """)
+                mean_iv,
+                PERCENT_RANK() OVER (ORDER BY mean_iv) AS iv_percentile
+            FROM daily_avg_iv
+            ORDER BY pull_date DESC
+            LIMIT 60
+        """
+        return con.execute(sql).fetchdf()
+    except Exception:
+        return pd.DataFrame()
 
 
 st.title("GME Options Mart — Public Analytics")
@@ -145,29 +158,34 @@ has_snapshot = not snapshot_df.empty
 has_gex = not gex_top5_df.empty
 has_iv = not iv_df.empty
 
-st.caption("Live data from MotherDuck `gme_db` — all values tagged [REAL_API]. "
-           "DQC verification status: pending. See KNOWN_GAPS.md.")
+data_tag = "[REAL_API]"
+st.caption(
+    f"Live data from MotherDuck `gme_db` — all values tagged {data_tag}. "
+    "This tag means loaded from the warehouse pipeline; it does NOT mean externally fact-checked or DQC verified. "
+    "DQC verification: pending. See KNOWN_GAPS.md."
+)
 
 if not has_snapshot:
-    st.warning("**STALE** — `gme_dws_daily_snapshot_1d` returned no data.")
+    st.warning("**SCHEMA UNVERIFIED** — `gme_dws_daily_snapshot_1d` returned no data. "
+               "Table schema may not match expected columns.")
 
 if has_snapshot:
     latest = snapshot_df.iloc[0]
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Spot Price [REAL_API]", f"${latest['spot']:.2f}")
+        st.metric(f"Spot Price {data_tag}", f"${latest['spot']:.2f}")
     with col2:
         mp = latest["max_pain_strike"]
         convergence = latest["max_pain_convergence_pct"]
-        st.metric("Max Pain [REAL_API]", f"${mp:.2f}", delta=f"{convergence:.1f}% from spot")
+        st.metric(f"Max Pain {data_tag}", f"${mp:.2f}", delta=f"{convergence:.1f}% from spot")
     with col3:
         pc = latest["pc_ratio"]
         label = "Bearish" if pc > 1.0 else "Bullish"
-        st.metric("P/C Ratio [REAL_API]", f"{pc:.3f}", delta=label)
+        st.metric(f"P/C Ratio {data_tag}", f"{pc:.3f}", delta=label)
     with col4:
         net_gex = latest["net_gex"]
-        st.metric("Net GEX [REAL_API]", f"{net_gex:,.0f}")
+        st.metric(f"Net GEX {data_tag}", f"{net_gex:,.0f}")
 
 st.markdown("---")
 
@@ -191,7 +209,7 @@ if has_snapshot:
     )
     st.plotly_chart(fig_spot, use_container_width=True)
 else:
-    st.info("STALE — No snapshot data for price/max-pain trend.")
+    st.info("SCHEMA UNVERIFIED — No snapshot data for price/max-pain trend.")
 
 st.markdown("---")
 
@@ -221,7 +239,7 @@ with chart_cols[0]:
         )
         st.plotly_chart(fig_gex, use_container_width=True)
     else:
-        st.info("STALE — No GEX data available.")
+        st.info("SCHEMA UNVERIFIED — No GEX data available.")
 
 with chart_cols[1]:
     st.header("P/C Ratio Trend (30d)")
@@ -240,7 +258,7 @@ with chart_cols[1]:
         )
         st.plotly_chart(fig_pc, use_container_width=True)
     else:
-        st.info("STALE — No snapshot data for P/C trend.")
+        st.info("SCHEMA UNVERIFIED — No snapshot data for P/C trend.")
 
 st.markdown("---")
 
@@ -294,11 +312,11 @@ st.header("Coverage & Verification Status")
 
 metric_status = []
 for m in PUBLIC_METRIC_CATALOG:
-    data_status = "LOADED [REAL_API]" if has_snapshot else "BLOCKED"
+    data_status = "LOADED" if has_snapshot else "BLOCKED"
     if m["id"] in ("M-06", "M-07", "M-10"):
-        data_status = "LOADED [REAL_API]" if has_gex else "BLOCKED"
+        data_status = "LOADED" if has_gex else "BLOCKED"
     if m["id"] == "M-09":
-        data_status = "LOADED [REAL_API]" if has_iv else "BLOCKED"
+        data_status = "LOADED" if has_iv else "BLOCKED"
 
     metric_status.append({
         "ID": m["id"],
@@ -309,7 +327,7 @@ for m in PUBLIC_METRIC_CATALOG:
         "DQC Verification": m["verification"],
     })
 
-loaded_count = sum(1 for m in metric_status if m["Data Status"] == "LOADED [REAL_API]")
+loaded_count = sum(1 for m in metric_status if m["Data Status"] == "LOADED")
 total_count = len(metric_status)
 verified_count = sum(1 for m in metric_status if m["DQC Verification"] == "verified")
 
@@ -326,7 +344,8 @@ st.dataframe(pd.DataFrame(metric_status), hide_index=True, use_container_width=T
 
 st.caption(
     "**Data tag semantics:** `[REAL_API]` = loaded from MotherDuck warehouse pipeline. "
-    "This does NOT mean externally fact-checked. DQC verification is tracked separately. "
+    "This does NOT mean externally fact-checked or DQC verified. "
+    "DQC verification is tracked separately and is currently pending for all metrics. "
     "See `KNOWN_GAPS.md` for pending items."
 )
 

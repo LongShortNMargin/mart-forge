@@ -1,10 +1,13 @@
 """Tests for the GME options mart example.
 
 Validates:
-- Dashboard does not query forbidden tables
+- Dashboard queries only allowlisted public tables with explicit columns
 - Dashboard handles missing token gracefully (no crash)
+- Dashboard distinguishes BLOCKED / SCHEMA UNVERIFIED states
 - BRD/TDD/KNOWN_GAPS exist with required sections
-- No confidential content in example files
+- Verification claims are truthful (pending, not verified)
+- Visualizations are present
+- Live mode is default (no fixture fallback)
 """
 
 import ast
@@ -15,20 +18,7 @@ ROOT = Path(__file__).parent.parent
 EXAMPLE_DIR = ROOT / "examples" / "gme-options-mart"
 DASHBOARD_APP = EXAMPLE_DIR / "dashboard" / "app.py"
 
-FORBIDDEN_TABLE_NAMES = [
-    "gme_dws_warrant_monitor_1d",
-]
-
-FORBIDDEN_QUERY_PATTERNS = [
-    "warrant_qty",
-    "warrant_strike",
-    "warrant_expiry",
-    "intrinsic_total",
-    "moneyness",
-    "theta_regime",
-    "total_position_value",
-    "cost_basis",
-]
+PUBLIC_TABLES = {"gme_dws_daily_snapshot_1d", "gme_dws_strike_gex_1d"}
 
 
 class TestDashboardSafety:
@@ -39,39 +29,34 @@ class TestDashboardSafety:
         source = DASHBOARD_APP.read_text()
         ast.parse(source)
 
-    def test_no_forbidden_table_queries(self):
+    def test_dashboard_queries_only_public_tables(self):
         source = DASHBOARD_APP.read_text()
-        for table in FORBIDDEN_TABLE_NAMES:
-            occurrences = []
-            for i, line in enumerate(source.splitlines(), 1):
-                if table in line and "FORBIDDEN" not in line:
-                    occurrences.append(f"L{i}: {line.strip()}")
-            assert not occurrences, (
-                f"Dashboard queries forbidden table '{table}':\n"
-                + "\n".join(occurrences)
-            )
+        table_refs = re.findall(r"(?:FROM|from)\s+(\w+)", source)
+        for table in table_refs:
+            if table.startswith("gme_"):
+                assert table in PUBLIC_TABLES, (
+                    f"Dashboard queries non-allowlisted table: {table}"
+                )
 
-    def test_no_forbidden_column_queries(self):
+    def test_no_select_star(self):
         source = DASHBOARD_APP.read_text()
-        for col in FORBIDDEN_QUERY_PATTERNS:
-            for i, line in enumerate(source.splitlines(), 1):
-                if col in line.lower():
-                    stripped = line.strip()
-                    if stripped.startswith("#") or stripped.startswith("//"):
-                        continue
-                    if "FORBIDDEN" in line or "forbidden" in line:
-                        continue
-                    assert False, (
-                        f"Dashboard references forbidden column '{col}' at L{i}: {stripped}"
-                    )
+        for i, line in enumerate(source.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            assert "SELECT *" not in line and "select *" not in line, (
+                f"Dashboard uses SELECT * at L{i}: {stripped}"
+            )
 
     def test_dashboard_has_blocked_mode(self):
         source = DASHBOARD_APP.read_text()
         assert "BLOCKED" in source, "Dashboard must show BLOCKED state when no data"
 
-    def test_dashboard_has_stale_mode(self):
+    def test_dashboard_has_schema_unverified_state(self):
         source = DASHBOARD_APP.read_text()
-        assert "STALE" in source, "Dashboard must show STALE state when data is empty"
+        assert "SCHEMA UNVERIFIED" in source, (
+            "Dashboard must show SCHEMA UNVERIFIED state for query/schema failure"
+        )
 
     def test_dashboard_checks_token(self):
         source = DASHBOARD_APP.read_text()
@@ -87,11 +72,11 @@ class TestDashboardSafety:
         source = DASHBOARD_APP.read_text()
         assert "[REAL_API]" in source, "Dashboard must tag data with [REAL_API]"
 
-    def test_dashboard_disclaims_fact_check(self):
+    def test_dashboard_disclaims_dqc_verified(self):
         source = DASHBOARD_APP.read_text()
         lower = source.lower()
-        assert "not" in lower and "fact-check" in lower or "pending" in lower, (
-            "Dashboard must disclaim that data is not externally fact-checked"
+        assert "does not mean" in lower or "not mean" in lower, (
+            "Dashboard must disclaim that [REAL_API] does not mean DQC verified"
         )
 
     def test_no_hardcoded_credentials(self):
@@ -103,6 +88,22 @@ class TestDashboardSafety:
         matches = token_pattern.findall(source)
         assert not matches, (
             f"Dashboard contains hardcoded MotherDuck token: {matches}"
+        )
+
+    def test_live_mode_default(self):
+        source = DASHBOARD_APP.read_text()
+        assert "fixture" not in source.lower() or "no fixture" in source.lower(), (
+            "Dashboard must default to live mode, not fixture fallback"
+        )
+
+    def test_dashboard_has_visualizations(self):
+        source = DASHBOARD_APP.read_text()
+        assert "plotly_chart" in source or "st.plotly_chart" in source, (
+            "Dashboard must include plotly chart visualizations"
+        )
+        chart_count = source.count("plotly_chart")
+        assert chart_count >= 3, (
+            f"Dashboard should have at least 3 chart visualizations, found {chart_count}"
         )
 
     def test_requirements_exist(self):
@@ -136,23 +137,55 @@ class TestExampleDocumentation:
         assert "source_type" in content.lower() or "Source Type" in content
         assert "link_status" in content.lower() or "Link Status" in content
 
-    def test_brd_has_excluded_metrics(self):
+    def test_brd_no_false_verified_claims(self):
         content = (EXAMPLE_DIR / "business-requirements.md").read_text()
-        assert "Excluded" in content or "excluded" in content, (
-            "BRD must document excluded private metrics"
-        )
+        for i, line in enumerate(content.splitlines(), 1):
+            if "| M-" in line and "verified" in line.lower():
+                assert "pending_verification" in line, (
+                    f"BRD metric at L{i} claims verified without pending qualifier: {line.strip()}"
+                )
+
+    def test_brd_data_sources_pending(self):
+        content = (EXAMPLE_DIR / "business-requirements.md").read_text()
+        in_sources = False
+        for line in content.splitlines():
+            if "Data Sources" in line:
+                in_sources = True
+                continue
+            if in_sources and line.startswith("---"):
+                break
+            if in_sources and "|" in line and "verified" in line.lower():
+                assert "pending_verification" in line or "blocked" in line or "unsupported" in line, (
+                    f"BRD data source claims verified without evidence: {line.strip()}"
+                )
 
     def test_tdd_has_column_specs(self):
         content = (EXAMPLE_DIR / "tech-design-doc.md").read_text()
         assert "column_name" in content or "Column Specification" in content
 
-    def test_tdd_excludes_warrant_table(self):
+    def test_tdd_no_grade(self):
         content = (EXAMPLE_DIR / "tech-design-doc.md").read_text()
+        assert "Grade:" not in content, "TDD must not claim a grade at MVP checkpoint"
+
+    def test_tdd_tables_pending_verification(self):
+        content = (EXAMPLE_DIR / "tech-design-doc.md").read_text()
+        in_summary = False
         for line in content.splitlines():
-            if "gme_dws_warrant_monitor_1d" in line:
-                assert "EXCLUDED" in line or "Excluded" in line or "excluded" in line, (
-                    "TDD must mark warrant table as EXCLUDED, not include it as active"
+            if "Table Summary" in line:
+                in_summary = True
+                continue
+            if in_summary and line.startswith("---"):
+                break
+            if in_summary and "| `gme_" in line:
+                assert "pending_verification" in line, (
+                    f"TDD table claims non-pending status: {line.strip()}"
                 )
+
+    def test_tdd_discloses_incomplete_sections(self):
+        content = (EXAMPLE_DIR / "tech-design-doc.md").read_text()
+        assert "pending" in content.lower() and ("T-7" in content or "Incomplete" in content), (
+            "TDD must disclose incomplete sections as pending"
+        )
 
     def test_known_gaps_has_coverage(self):
         content = (EXAMPLE_DIR / "KNOWN_GAPS.md").read_text()

@@ -87,7 +87,7 @@ mart-forge ships as a Claude Code plugin with skills that enforce the lifecycle:
 
 `examples/gme-options-mart/` contains a real conformance trial against the mart-forge lifecycle:
 
-- **BRD + TDD:** Scoped to public GME options-chain analytics (spot, max pain, GEX, IV, P/C ratio). No operator positions or private data.
+- **BRD + TDD:** Scoped to public GME options-chain analytics (spot, max pain, GEX, IV, P/C ratio).
 - **Streamlit Dashboard:** Connects to a live MotherDuck warehouse (`gme_db`) via `MOTHERDUCK_TOKEN`. Renders real charts when data is available; shows explicit BLOCKED/STALE status when it is not.
 - **Coverage Panel:** Shows which metrics are verified vs pending, with numerator/denominator coverage.
 

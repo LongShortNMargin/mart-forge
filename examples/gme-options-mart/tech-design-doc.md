@@ -1,7 +1,6 @@
 # GME Options Mart — Technical Design Document (TDD)
 
-Status: **MVP Checkpoint** (pending full column-level verification — Phase F iteration)
-Grade: **B-** (tables exist in warehouse, column specs need reconciliation)
+Status: **MVP Checkpoint** (pending runtime column-level verification — Phase F iteration)
 
 ---
 
@@ -9,7 +8,8 @@ Grade: **B-** (tables exist in warehouse, column specs need reconciliation)
 
 | Version | Date | Author | Change |
 |---------|------|--------|--------|
-| 0.1 | 2026-05-24 | DROOK-OPUS | MVP checkpoint: document existing warehouse tables for dashboard |
+| 0.1 | 2026-05-24 | DROOK-OPUS | MVP checkpoint: document expected warehouse tables for dashboard |
+| 0.2 | 2026-05-24 | DROOK-OPUS | Correction pass: pending_verification on all tables, disclose incomplete sections |
 
 ---
 
@@ -27,15 +27,11 @@ Grade: **B-** (tables exist in warehouse, column specs need reconciliation)
 | Table | Layer | Grain | Materialization | Status |
 |-------|-------|-------|-----------------|--------|
 | `gme_ods_options_chain` | ODS | per-contract per-pull_date | incremental | `pending_verification` |
-| `gme_dim_date` | DIM | per-calendar-date | table (seed) | `verified` |
+| `gme_dim_date` | DIM | per-calendar-date | table (seed) | `pending_verification` |
 | `gme_dws_daily_snapshot_1d` | DWS | per-pull_date | table | `pending_verification` |
 | `gme_dws_strike_gex_1d` | DWS | per-strike per-expiry per-pull_date | table | `pending_verification` |
 
-### Excluded Tables
-
-| Table | Reason |
-|-------|--------|
-| `gme_dws_warrant_monitor_1d` | **EXCLUDED** — contains operator-private warrant position data (quantity, cost basis, intrinsic value). Not part of public mart. |
+All table statuses are `pending_verification` — actual MotherDuck schemas have not been reconciled against these specs at this checkpoint.
 
 ---
 
@@ -68,6 +64,8 @@ OpenBB SDK / yfinance (free CBOE)
 ---
 
 ## T-5: Column Specification
+
+Column specs below reflect the **expected** schema based on pipeline design. Actual MotherDuck columns require runtime reconciliation in Phase F. All column-level claims are `pending_verification`.
 
 ### gme_dws_daily_snapshot_1d
 
@@ -117,6 +115,24 @@ OpenBB SDK / yfinance (free CBOE)
 
 ---
 
+## T-7 through T-13: Incomplete Sections
+
+The following TDD sections are not yet populated for this MVP checkpoint:
+
+| Section | Title | Status |
+|---------|-------|--------|
+| T-7 | Dimension Table Design | `pending` — only `dim_date` exists, inline strike dimensions |
+| T-8 | Fact Table Design | `pending` — DWS aggregates directly from ODS |
+| T-9 | Count Aggregation Design | `pending` |
+| T-10 | Performance Aggregation Design | `pending` |
+| T-11 | Presentation Table Design | `pending` — no ADS/OBT layer yet |
+| T-12 | Physical Design | `pending` — column-level specs in T-5 are expected, not reconciled |
+| T-13 | Implementation Specification | `pending` — dbt project not in public repo |
+
+These sections are required for full TDD sign-off and will be populated during Phase F iteration.
+
+---
+
 ## T-14: DQC Plan
 
 | Control Class | Applicable | Target | Severity | Notes |
@@ -132,6 +148,15 @@ OpenBB SDK / yfinance (free CBOE)
 
 ---
 
+## T-15 through T-16: Incomplete Sections
+
+| Section | Title | Status |
+|---------|-------|--------|
+| T-15 | Test Inventory | `pending` — tests exist in `tests/` but inventory not formalized |
+| T-16 | Operations | `pending` — refresh schedule documented in BRD but SLA/alerting not specified |
+
+---
+
 ## T-17: Known Limitations
 
 - DWD layer is not present in the current warehouse — DWS tables aggregate directly from ODS
@@ -139,4 +164,6 @@ OpenBB SDK / yfinance (free CBOE)
 - IV percentile calculated from internal history only (no external IV rank comparison)
 - GEX formula uses simplified gamma; commercial providers may use different models
 - No 7d/30d trailing aggregation tables yet
-- Column specs above reflect expected schema; actual warehouse columns need reconciliation in Phase F
+- Column specs above reflect expected schema; actual warehouse columns require reconciliation in Phase F
+- ODS ingestion script is not in the public repository
+- TDD sections T-7 through T-13 and T-15/T-16 are incomplete at this checkpoint

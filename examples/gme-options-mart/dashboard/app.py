@@ -20,7 +20,7 @@ PUBLIC_TABLES = {"gme_dws_daily_snapshot_1d", "gme_dws_strike_gex_1d"}
 
 SNAPSHOT_COLUMNS = [
     "pull_date", "spot", "max_pain_strike", "max_pain_convergence_pct",
-    "pc_ratio", "net_gex", "provider", "pull_ts_utc",
+    "pc_ratio", "net_gex",
 ]
 
 GEX_COLUMNS = [

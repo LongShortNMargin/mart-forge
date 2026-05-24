@@ -45,7 +45,7 @@ All 10 public metrics are intended to load from MotherDuck when data is availabl
 
 | Gap | Impact | Resolution Path | Priority |
 |-----|--------|----------------|----------|
-| Column schema not reconciled | Dashboard queries may fail on schema mismatch | Runtime schema verification against MotherDuck | High |
+| Snapshot column reconciliation partial | Live DWS surface lacks `provider`/`pull_ts_utc` (ODS provenance); dashboard projection corrected to exclude them. Remaining columns pending full reconciliation. | Runtime schema verification against MotherDuck | High |
 | No IV term structure chart | Missing visualization for skew analysis | Add once IV surface data available | Low |
 | No OI delta (day-over-day) | Cannot show OI flow changes | Requires 2+ days of ODS history | Medium |
 | No fixture/demo mode toggle | Demo without live token shows blocked state only | Add fixture mode with sample data and banner | Low |

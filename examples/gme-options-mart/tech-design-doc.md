@@ -79,8 +79,8 @@ All example values below are placeholders [THEORETICAL] — not sourced from liv
 | max_pain_convergence_pct | DECIMAL(5,2) | Percentage distance from spot to max pain | -7.9 [THEORETICAL] | derived — `(max_pain_strike - spot) / spot * 100` | Computed |
 | pc_ratio | DECIMAL(8,4) | Put/Call volume ratio | 0.8500 [THEORETICAL] | derived — `sum(put_volume) / nullif(sum(call_volume), 0)` | ODS options chain |
 | net_gex | DECIMAL(18,2) | Net gamma exposure across all strikes | 1250000.00 [THEORETICAL] | derived — `sum(gamma * OI * 100 * spot^2 * 0.01 * sign)` | ODS options chain |
-| provider | VARCHAR | Data source identifier | pending [THEORETICAL] | native | Ingestion metadata |
-| pull_ts_utc | TIMESTAMP | UTC timestamp of data pull | 2026-05-23T20:45:00Z [THEORETICAL] | native | Ingestion metadata |
+| provider | VARCHAR | Data source identifier | pending [THEORETICAL] | native | ODS provenance — not present in live DWS surface; not queried by dashboard |
+| pull_ts_utc | TIMESTAMP | UTC timestamp of data pull | 2026-05-23T20:45:00Z [THEORETICAL] | native | ODS provenance — not present in live DWS surface; not queried by dashboard |
 
 ### gme_dws_strike_gex_1d
 

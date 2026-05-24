@@ -119,6 +119,24 @@ class TestDashboardSafety:
             "Dashboard uses deprecated use_container_width; use width='stretch'"
         )
 
+    def test_snapshot_no_absent_provenance_columns(self):
+        source = DASHBOARD_APP.read_text()
+        tree = ast.parse(source)
+        absent_columns = {"provider", "pull_ts_utc"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "SNAPSHOT_COLUMNS":
+                        if isinstance(node.value, ast.List):
+                            cols = {
+                                elt.value for elt in node.value.elts
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                            }
+                            found = cols & absent_columns
+                            assert not found, (
+                                f"SNAPSHOT_COLUMNS includes absent provenance columns: {found}"
+                            )
+
 
 class TestExampleDocumentation:
     def test_brd_exists(self):

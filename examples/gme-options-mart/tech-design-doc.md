@@ -38,7 +38,7 @@ All table statuses are `pending_verification` — actual MotherDuck schemas have
 ## T-4: Data Architecture Diagram
 
 ```
-OpenBB SDK / yfinance (free CBOE)
+Public options data API (pending source confirmation)
         │
         ▼
 ┌──────────────────┐
@@ -69,32 +69,36 @@ Column specs below reflect the **expected** schema based on pipeline design. Act
 
 ### gme_dws_daily_snapshot_1d
 
+All example values below are placeholders [THEORETICAL] — not sourced from live data.
+
 | column_name | data_type | definition | example_value | calculation | data_source |
 |-------------|-----------|-----------|---------------|-------------|-------------|
-| pull_date | DATE | Trading day of data capture | 2026-05-23 | native | OpenBB pull timestamp |
-| spot | DECIMAL(10,2) | GME last closing price | 27.15 | native — last close from price endpoint | yfinance/CBOE |
-| max_pain_strike | DECIMAL(10,2) | Strike minimizing total option holder P&L | 25.00 | derived — `argmin(sum(call_pain + put_pain) over strikes)` | ODS options chain |
-| max_pain_convergence_pct | DECIMAL(5,2) | Percentage distance from spot to max pain | -7.9 | derived — `(max_pain_strike - spot) / spot * 100` | Computed |
-| pc_ratio | DECIMAL(8,4) | Put/Call volume ratio | 0.8500 | derived — `sum(put_volume) / nullif(sum(call_volume), 0)` | ODS options chain |
-| net_gex | DECIMAL(18,2) | Net gamma exposure across all strikes | 1250000.00 | derived — `sum(gamma * OI * 100 * spot^2 * 0.01 * sign)` | ODS options chain |
-| provider | VARCHAR | Data source identifier | cboe_delayed | native | Ingestion metadata |
-| pull_ts_utc | TIMESTAMP | UTC timestamp of data pull | 2026-05-23T20:45:00Z | native | Ingestion metadata |
+| pull_date | DATE | Trading day of data capture | 2026-05-23 [THEORETICAL] | native | Ingestion metadata |
+| spot | DECIMAL(10,2) | GME last closing price | 27.15 [THEORETICAL] | native — last close from price endpoint | pending source confirmation |
+| max_pain_strike | DECIMAL(10,2) | Strike minimizing total option holder P&L | 25.00 [THEORETICAL] | derived — `argmin(sum(call_pain + put_pain) over strikes)` | ODS options chain |
+| max_pain_convergence_pct | DECIMAL(5,2) | Percentage distance from spot to max pain | -7.9 [THEORETICAL] | derived — `(max_pain_strike - spot) / spot * 100` | Computed |
+| pc_ratio | DECIMAL(8,4) | Put/Call volume ratio | 0.8500 [THEORETICAL] | derived — `sum(put_volume) / nullif(sum(call_volume), 0)` | ODS options chain |
+| net_gex | DECIMAL(18,2) | Net gamma exposure across all strikes | 1250000.00 [THEORETICAL] | derived — `sum(gamma * OI * 100 * spot^2 * 0.01 * sign)` | ODS options chain |
+| provider | VARCHAR | Data source identifier | pending [THEORETICAL] | native | Ingestion metadata |
+| pull_ts_utc | TIMESTAMP | UTC timestamp of data pull | 2026-05-23T20:45:00Z [THEORETICAL] | native | Ingestion metadata |
 
 ### gme_dws_strike_gex_1d
 
+All example values below are placeholders [THEORETICAL] — not sourced from live data.
+
 | column_name | data_type | definition | example_value | calculation | data_source |
 |-------------|-----------|-----------|---------------|-------------|-------------|
-| pull_date | DATE | Trading day | 2026-05-23 | native | OpenBB pull timestamp |
-| strike | DECIMAL(10,2) | Option strike price | 25.00 | native | CBOE chain |
-| expiry | DATE | Option expiration date | 2026-06-20 | native | CBOE chain |
-| series_type | VARCHAR | Expiry classification | MONTHLY | derived — monthly vs weekly detection | Computed |
-| dte | INTEGER | Days to expiration | 28 | derived — `expiry - pull_date` | Computed |
-| call_gex | DECIMAL(18,2) | Call gamma exposure at strike | 85000.00 | derived — `call_gamma * call_oi * 100 * spot^2 * 0.01` | ODS chain |
-| put_gex | DECIMAL(18,2) | Put gamma exposure at strike | -42000.00 | derived — `-1 * put_gamma * put_oi * 100 * spot^2 * 0.01` | ODS chain |
-| net_gex | DECIMAL(18,2) | Net GEX at strike | 43000.00 | derived — `call_gex + put_gex` | Computed |
-| total_oi | INTEGER | Total open interest (calls + puts) | 15230 | derived — `call_oi + put_oi` | ODS chain |
-| avg_iv | DECIMAL(8,4) | Average implied volatility at strike | 0.8500 | derived — `(call_iv + put_iv) / 2` | ODS chain |
-| gex_rank | INTEGER | Rank by absolute net GEX | 1 | derived — `row_number() over (partition by pull_date order by abs(net_gex) desc)` | Computed |
+| pull_date | DATE | Trading day | 2026-05-23 [THEORETICAL] | native | Ingestion metadata |
+| strike | DECIMAL(10,2) | Option strike price | 25.00 [THEORETICAL] | native | pending source confirmation |
+| expiry | DATE | Option expiration date | 2026-06-20 [THEORETICAL] | native | pending source confirmation |
+| series_type | VARCHAR | Expiry classification | MONTHLY [THEORETICAL] | derived — monthly vs weekly detection | Computed |
+| dte | INTEGER | Days to expiration | 28 [THEORETICAL] | derived — `expiry - pull_date` | Computed |
+| call_gex | DECIMAL(18,2) | Call gamma exposure at strike | 85000.00 [THEORETICAL] | derived — `call_gamma * call_oi * 100 * spot^2 * 0.01` | ODS chain |
+| put_gex | DECIMAL(18,2) | Put gamma exposure at strike | -42000.00 [THEORETICAL] | derived — `-1 * put_gamma * put_oi * 100 * spot^2 * 0.01` | ODS chain |
+| net_gex | DECIMAL(18,2) | Net GEX at strike | 43000.00 [THEORETICAL] | derived — `call_gex + put_gex` | Computed |
+| total_oi | INTEGER | Total open interest (calls + puts) | 15230 [THEORETICAL] | derived — `call_oi + put_oi` | ODS chain |
+| avg_iv | DECIMAL(8,4) | Average implied volatility at strike | 0.8500 [THEORETICAL] | derived — `(call_iv + put_iv) / 2` | ODS chain |
+| gex_rank | INTEGER | Rank by absolute net GEX | 1 [THEORETICAL] | derived — `row_number() over (partition by pull_date order by abs(net_gex) desc)` | Computed |
 
 ---
 
@@ -104,7 +108,7 @@ Column specs below reflect the **expected** schema based on pipeline design. Act
 
 | Property | Value |
 |----------|-------|
-| Source | OpenBB SDK v4 (CBOE delayed) / yfinance fallback |
+| Source | Public options data API (pending source confirmation) |
 | Grain | One row per option contract per pull_date |
 | Logical Partition | `pull_date` |
 | Incremental Strategy | `delete+insert` (dbt-duckdb) |
@@ -159,11 +163,13 @@ These sections are required for full TDD sign-off and will be populated during P
 
 ## T-17: Known Limitations
 
-- DWD layer is not present in the current warehouse — DWS tables aggregate directly from ODS
+- All tables and layers below are proposed checkpoint design pending live schema verification
+- DWD layer is not present in the proposed design — DWS tables aggregate directly from ODS
 - No DIM tables beyond `dim_date` — strike/expiry dimensions are inline
 - IV percentile calculated from internal history only (no external IV rank comparison)
 - GEX formula uses simplified gamma; commercial providers may use different models
 - No 7d/30d trailing aggregation tables yet
 - Column specs above reflect expected schema; actual warehouse columns require reconciliation in Phase F
 - ODS ingestion script is not in the public repository
+- Source binding (provider, endpoint) is pending discovery and confirmation
 - TDD sections T-7 through T-13 and T-15/T-16 are incomplete at this checkpoint

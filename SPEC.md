@@ -23,7 +23,7 @@ This specification defines the governance, lifecycle, and conformance contract f
 ## 2. Goals
 
 - **Framework-first product identity:** mart-forge is a methodology-driven, agent-executable specification for scaffolding Kimball data warehouses. Examples are conformance exams, not the product.
-- **Two-phase build contract:** Phase F (framework construction, zero example content) followed by Phase G (conformance trial using the framework).
+- **Two-phase build contract:** Phase F (framework construction and quality iteration, with optional conformance checkpoints) followed by Phase G (full conformance trial using the framework).
 - **Structured trial protocol:** Evidence-first design contracts (Shot 1) followed by implementation (Shot 2). Rejection triggers reset, not patching.
 - **Source discovery as first-class requirement:** No provider is pre-selected. Every metric declares source type, link status, and verification path.
 - **Confidentiality boundaries:** Framework artifacts contain zero private identifiers, paths, or operator-specific data.

@@ -34,14 +34,16 @@ US equity options analytics — single-ticker (GME), daily grain, options-chain-
 
 ### Cadence
 
-Daily at market close (16:45 ET, weekdays). Weekend/holiday data is stale-carried from last trading day.
+Refresh schedule is pending confirmation. Expected: daily at market close on trading days.
 
 ### Data Sources
 
 | Source | Provider | Type | Auth | Freshness | Status |
 |--------|----------|------|------|-----------|--------|
-| Options chain (CBOE) | OpenBB SDK v4 / yfinance | API | Free (rate-limited) | EOD | `pending_verification` |
-| Price data | OpenBB SDK v4 / yfinance | API | Free | EOD | `pending_verification` |
+| Options chain | pending confirmation | API | pending | pending | `pending_verification` |
+| Price data | pending confirmation | API | pending | pending | `pending_verification` |
+
+Source binding (specific provider and endpoint) is pending discovery and runtime verification.
 
 ---
 
@@ -51,16 +53,16 @@ Daily at market close (16:45 ET, weekdays). Weekend/holiday data is stale-carrie
 
 | # | Metric | Source Type | Link Status | Verification Status |
 |---|--------|------------|-------------|---------------------|
-| M-01 | Spot Price (last close) | `native` | `exact` | `pending_verification` |
-| M-02 | Max Pain Strike | `derived` | `proxy` | `pending_verification` |
-| M-03 | Max Pain Convergence % | `derived` | `unsupported` | `pending_verification` |
-| M-04 | Put/Call Ratio (volume) | `native` | `proxy` | `pending_verification` |
-| M-05 | Net GEX (Gamma Exposure) | `derived` | `proxy` | `pending_verification` |
-| M-06 | Call GEX by Strike | `derived` | `unsupported` | `pending_verification` |
-| M-07 | Put GEX by Strike | `derived` | `unsupported` | `pending_verification` |
-| M-08 | IV (Implied Volatility avg) | `native` | `proxy` | `pending_verification` |
-| M-09 | IV Percentile (rolling) | `derived` | `proxy` | `pending_verification` |
-| M-10 | OI by Strike (top N) | `native` | `proxy` | `pending_verification` |
+| M-01 | Spot Price (last close) | `native` | `unverified` | `pending_verification` |
+| M-02 | Max Pain Strike | `derived` | `unverified` | `pending_verification` |
+| M-03 | Max Pain Convergence % | `derived` | `unverified` | `pending_verification` |
+| M-04 | Put/Call Ratio (volume) | `native` | `unverified` | `pending_verification` |
+| M-05 | Net GEX (Gamma Exposure) | `derived` | `unverified` | `pending_verification` |
+| M-06 | Call GEX by Strike | `derived` | `unverified` | `pending_verification` |
+| M-07 | Put GEX by Strike | `derived` | `unverified` | `pending_verification` |
+| M-08 | IV (Implied Volatility avg) | `native` | `unverified` | `pending_verification` |
+| M-09 | IV Percentile (rolling) | `derived` | `unverified` | `pending_verification` |
+| M-10 | OI by Strike (top N) | `native` | `unverified` | `pending_verification` |
 
 This mart covers only public market data. Non-public data sources are out of scope.
 
@@ -86,12 +88,13 @@ All 10 metrics are intended to load from MotherDuck warehouse tables (`gme_dws_d
 
 ### Constraints
 
-- Free-tier API rate limits may cause intermittent ingestion failures
+- API rate limits may cause intermittent ingestion failures (provider pending confirmation)
 - GEX calculation methodology varies across providers; our formula may differ from commercial services
 - IV percentile calculation uses internal history window; external providers may use different windows
 - Weekend/holiday data shows last trading day values (stale-carry, not interpolation)
 - All external comparison links are pending browser-automated verification (G-LINK gate)
 - Data source provider endpoints have not been runtime-tested in this checkpoint
+- Source binding (provider, endpoint, authentication) is pending discovery
 
 ### Phase F Iteration Items
 

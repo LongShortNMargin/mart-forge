@@ -30,7 +30,7 @@ All 10 public metrics are intended to load from MotherDuck when data is availabl
 | Gap | Impact | Resolution Path | Priority |
 |-----|--------|----------------|----------|
 | External comparison links not browser-verified | G-LINK gate not satisfied | Playwright verification pass | High |
-| Data source provider endpoints not runtime-tested | Provider availability unproven | Runtime test of OpenBB/yfinance endpoints | High |
+| Data source provider endpoints not runtime-tested | Provider availability unproven | Runtime test of data source endpoints (pending source confirmation) | High |
 | No fixture manifest | G-FIXTURE gate not satisfied | Generate manifest with source date + schema hash | Medium |
 
 ### 3. Pipeline / Reproduction
@@ -65,6 +65,6 @@ Items requiring operator or Codex verification before promotion:
 
 1. **Live MotherDuck smoke test** — requires `MOTHERDUCK_TOKEN` in a secure environment
 2. **External DQC reconciliation** — operator compares dashboard values against reference sites on a live trading day
-3. **Ingestion pipeline documentation** — operator confirms which endpoints currently feed the warehouse
+3. **Source binding confirmation** — operator confirms which endpoints and providers currently feed the warehouse
 4. **Column schema reconciliation** — verify TDD column specs match actual MotherDuck table schemas
-5. **Provider endpoint runtime test** — confirm data source APIs respond with expected data
+5. **Provider endpoint runtime test** — confirm data source APIs respond with expected data (provider pending confirmation)

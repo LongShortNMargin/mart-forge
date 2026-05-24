@@ -291,14 +291,14 @@ if has_gex and not gex_all_df.empty:
     fig_oi = go.Figure()
     gex_sorted = gex_all_df.sort_values("strike")
     fig_oi.add_trace(go.Bar(
-        x=gex_sorted["strike"].astype(str),
+        x=gex_sorted["strike"],
         y=gex_sorted["total_oi"],
         name="Total OI",
         marker_color="#66bb6a",
     ))
     if has_snapshot:
         spot_val = snapshot_df.iloc[0]["spot"]
-        fig_oi.add_vline(x=str(round(spot_val)), line_dash="dash",
+        fig_oi.add_vline(x=float(spot_val), line_dash="dash",
                          line_color="red", annotation_text=f"Spot ${spot_val:.0f}")
     fig_oi.update_layout(
         xaxis_title="Strike", yaxis_title="Open Interest",

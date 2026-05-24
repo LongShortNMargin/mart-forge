@@ -137,6 +137,24 @@ class TestDashboardSafety:
                                 f"SNAPSHOT_COLUMNS includes absent provenance columns: {found}"
                             )
 
+    def test_oi_chart_numeric_axis_consistency(self):
+        source = DASHBOARD_APP.read_text()
+        in_oi_section = False
+        for i, line in enumerate(source.splitlines(), 1):
+            if "Open Interest by Strike" in line:
+                in_oi_section = True
+            if in_oi_section and "st.plotly_chart" in line:
+                in_oi_section = False
+            if in_oi_section:
+                if "add_trace" in line or "x=" in line:
+                    assert '.astype(str)' not in line, (
+                        f"OI chart L{i}: strike x-axis must be numeric, not string-cast"
+                    )
+                if "add_vline" in line:
+                    assert 'str(' not in line, (
+                        f"OI chart L{i}: vline x position must be numeric, not string"
+                    )
+
 
 class TestExampleDocumentation:
     def test_brd_exists(self):

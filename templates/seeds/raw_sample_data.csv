@@ -1,0 +1,6 @@
+record_id,pull_date,amount,customer_id,customer_name,provider,pull_ts_utc,quote_ts_utc,run_id
+ORD-001,2020-01-01,99.50,CUST-001,Alice,csv_provider,2020-01-01T06:00:00,2020-01-01T05:30:00,run-001
+ORD-002,2020-01-01,150.25,CUST-002,Bob,csv_provider,2020-01-01T06:00:00,2020-01-01T05:30:00,run-001
+ORD-003,2020-01-02,75.00,CUST-001,Alice,csv_provider,2020-01-02T06:00:00,2020-01-02T05:30:00,run-002
+ORD-004,2020-01-02,200.00,CUST-003,Charlie,csv_provider,2020-01-02T06:00:00,2020-01-02T05:30:00,run-002
+ORD-005,2020-01-03,50.75,CUST-002,Bob,csv_provider,2020-01-03T06:00:00,2020-01-03T05:30:00,run-003

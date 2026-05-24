@@ -1,0 +1,5 @@
+streamlit>=1.30
+duckdb>=0.10,<1.5.3
+duckdb-engine>=0.13
+pandas>=2.0
+plotly>=5.18

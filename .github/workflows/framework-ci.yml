@@ -106,7 +106,6 @@ jobs:
           | M-1 | orders.csv | exact | Field mapping: amount -> revenue |
           | M-2 | calculated | proxy | Derived from count of ODS records |
 
-          [ARGENT-PROXY 2026-01-01T00:00:00Z]
           Sign-off: APPROVED
           Grade: A
           BRDEOF
@@ -204,13 +203,12 @@ jobs:
           ## T-17. Known Limitations
           None for fixture.
 
-          [ARGENT-PROXY 2026-01-01T00:00:00Z]
           Sign-off: APPROVED
           Grade: A
           TDDEOF
 
       - name: Scaffold from installed wheel
-        run: mart-forge scaffold /tmp/ci-mart --name ci-test-mart --prefix ci
+        run: mart-forge scaffold /tmp/ci-mart --name ci-test-mart --prefix ci --fixture
 
       - name: dbt parse
         run: dbt parse --profiles-dir . --target ci

@@ -59,7 +59,7 @@ GENERIC_CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
 ]
 
 CATEGORY_ALLOWLIST = {
-    "position-reference": {"gex_rank", "position"},
+    "position-reference": {"gex_rank"},
     "strategy-reference": {"incremental strategy", "incremental_strategy", "scd strategy"},
 }
 

@@ -32,13 +32,13 @@ PUBLIC_METRIC_CATALOG = [
     {"id": "M-01", "name": "Spot Price", "source_type": "native", "link_status": "unverified", "verification": "pending_verification"},
     {"id": "M-02", "name": "Max Pain Strike", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
     {"id": "M-03", "name": "Max Pain Convergence %", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
-    {"id": "M-04", "name": "Put/Call Ratio", "source_type": "native", "link_status": "unverified", "verification": "pending_verification"},
+    {"id": "M-04", "name": "Put/Call Ratio", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
     {"id": "M-05", "name": "Net GEX", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
     {"id": "M-06", "name": "Call GEX by Strike", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
     {"id": "M-07", "name": "Put GEX by Strike", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
-    {"id": "M-08", "name": "IV (Implied Volatility avg)", "source_type": "native", "link_status": "unverified", "verification": "pending_verification"},
+    {"id": "M-08", "name": "IV (Implied Volatility avg)", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
     {"id": "M-09", "name": "IV Percentile", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
-    {"id": "M-10", "name": "OI by Strike", "source_type": "native", "link_status": "unverified", "verification": "pending_verification"},
+    {"id": "M-10", "name": "OI by Strike", "source_type": "derived", "link_status": "unverified", "verification": "pending_verification"},
 ]
 
 

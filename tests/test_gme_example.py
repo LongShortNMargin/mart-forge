@@ -380,6 +380,70 @@ class TestTddNoFactualExistence:
         )
 
 
+class TestSourceTypeConsistency:
+    """BRD and dashboard source_type must align with TDD calculations.
+    Metrics with derived calculations (ratios, averages, aggregations) must
+    not be classified native when source is pending."""
+
+    DERIVED_METRIC_IDS = {"M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10"}
+    NATIVE_METRIC_IDS = {"M-01"}
+
+    def test_brd_derived_metrics_not_native(self):
+        content = (EXAMPLE_DIR / "business-requirements.md").read_text()
+        for i, line in enumerate(content.splitlines(), 1):
+            if "| M-" not in line:
+                continue
+            cols = [c.strip() for c in line.split("|")]
+            if len(cols) < 5:
+                continue
+            metric_id = cols[1].strip()
+            source_type = cols[3].strip().strip("`")
+            if metric_id in self.DERIVED_METRIC_IDS:
+                assert source_type == "derived", (
+                    f"BRD {metric_id} at L{i} has source_type '{source_type}' "
+                    f"but TDD calculation is derived"
+                )
+
+    def test_brd_native_metrics_are_native(self):
+        content = (EXAMPLE_DIR / "business-requirements.md").read_text()
+        for i, line in enumerate(content.splitlines(), 1):
+            if "| M-" not in line:
+                continue
+            cols = [c.strip() for c in line.split("|")]
+            if len(cols) < 5:
+                continue
+            metric_id = cols[1].strip()
+            source_type = cols[3].strip().strip("`")
+            if metric_id in self.NATIVE_METRIC_IDS:
+                assert source_type == "native", (
+                    f"BRD {metric_id} at L{i} has source_type '{source_type}' "
+                    f"but TDD calculation is native"
+                )
+
+    def test_dashboard_source_types_match_brd(self):
+        brd_content = (EXAMPLE_DIR / "business-requirements.md").read_text()
+        brd_types = {}
+        for line in brd_content.splitlines():
+            if "| M-" not in line:
+                continue
+            cols = [c.strip() for c in line.split("|")]
+            if len(cols) < 5:
+                continue
+            brd_types[cols[1].strip()] = cols[3].strip().strip("`")
+
+        source = DASHBOARD_APP.read_text()
+        catalog_pattern = re.compile(
+            r'"id":\s*"(M-\d+)".*?"source_type":\s*"(\w+)"'
+        )
+        for match in catalog_pattern.finditer(source):
+            mid, stype = match.group(1), match.group(2)
+            if mid in brd_types:
+                assert stype == brd_types[mid], (
+                    f"Dashboard {mid} has source_type '{stype}' "
+                    f"but BRD has '{brd_types[mid]}'"
+                )
+
+
 class TestSpecConsistency:
     def test_spec_phase_f_allows_examples(self):
         if not SPEC_PATH.exists():

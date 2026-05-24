@@ -56,13 +56,13 @@ Source binding (specific provider and endpoint) is pending discovery and runtime
 | M-01 | Spot Price (last close) | `native` | `unverified` | `pending_verification` |
 | M-02 | Max Pain Strike | `derived` | `unverified` | `pending_verification` |
 | M-03 | Max Pain Convergence % | `derived` | `unverified` | `pending_verification` |
-| M-04 | Put/Call Ratio (volume) | `native` | `unverified` | `pending_verification` |
+| M-04 | Put/Call Ratio (volume) | `derived` | `unverified` | `pending_verification` |
 | M-05 | Net GEX (Gamma Exposure) | `derived` | `unverified` | `pending_verification` |
 | M-06 | Call GEX by Strike | `derived` | `unverified` | `pending_verification` |
 | M-07 | Put GEX by Strike | `derived` | `unverified` | `pending_verification` |
-| M-08 | IV (Implied Volatility avg) | `native` | `unverified` | `pending_verification` |
+| M-08 | IV (Implied Volatility avg) | `derived` | `unverified` | `pending_verification` |
 | M-09 | IV Percentile (rolling) | `derived` | `unverified` | `pending_verification` |
-| M-10 | OI by Strike (top N) | `native` | `unverified` | `pending_verification` |
+| M-10 | OI by Strike (top N) | `derived` | `unverified` | `pending_verification` |
 
 This mart covers only public market data. Non-public data sources are out of scope.
 

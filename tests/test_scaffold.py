@@ -1104,6 +1104,36 @@ class TestProxyStampDetection:
         doc.write_text("# Doc\n[ARGENT-PROXY sometime]\nGrade: A\n")
         assert not _has_proxy_stamp(doc)
 
+    def test_accepts_positive_offset(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\n[ARGENT-PROXY 2026-05-24T12:00:00+07:00]\nGrade: A\n")
+        assert _has_proxy_stamp(doc)
+
+    def test_accepts_negative_offset(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\n[ARGENT-PROXY 2026-05-24T12:00:00-05:00]\nGrade: A\n")
+        assert _has_proxy_stamp(doc)
+
+    def test_rejects_missing_closing_bracket(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\n[ARGENT-PROXY 2026-05-24T12:00:00Z\nGrade: A\n")
+        assert not _has_proxy_stamp(doc)
+
+    def test_rejects_missing_timezone(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\n[ARGENT-PROXY 2026-05-24T12:00:00]\nGrade: A\n")
+        assert not _has_proxy_stamp(doc)
+
+    def test_rejects_suffix_before_bracket(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\n[ARGENT-PROXY 2026-05-24T12:00:00ZBAD]\nGrade: A\n")
+        assert not _has_proxy_stamp(doc)
+
+    def test_rejects_offset_without_colon(self, tmp_path):
+        doc = tmp_path / "doc.md"
+        doc.write_text("# Doc\n[ARGENT-PROXY 2026-05-24T12:00:00+0700]\nGrade: A\n")
+        assert not _has_proxy_stamp(doc)
+
 
 class TestGeneralContractScaffold:
     """General contract-driven scaffold with case_volume metric."""

@@ -74,7 +74,7 @@ CONTENT_SECTIONS = {
 }
 
 ARGENT_PROXY_RE = re.compile(
-    r"\[ARGENT-PROXY\s+\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
+    r"\[ARGENT-PROXY\s+\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})\]"
 )
 
 CONTRACT_FILE_NAMES = ("impl_contract.yml", "impl_contract.yaml")

@@ -83,6 +83,16 @@ mart-forge ships as a Claude Code plugin with skills that enforce the lifecycle:
 | `mart-review` | Review | Production readiness assessment |
 | `source-discovery` | A/B | Verify data source availability and fitness |
 
+## GME Options Mart — Live Example
+
+`examples/gme-options-mart/` contains a real conformance trial against the mart-forge lifecycle:
+
+- **BRD + TDD:** Scoped to public GME options-chain analytics (spot, max pain, GEX, IV, P/C ratio). No operator positions or private data.
+- **Streamlit Dashboard:** Connects to a live MotherDuck warehouse (`gme_db`) via `MOTHERDUCK_TOKEN`. Renders real charts when data is available; shows explicit BLOCKED/STALE status when it is not.
+- **Coverage Panel:** Shows which metrics are verified vs pending, with numerator/denominator coverage.
+
+Phase F (framework quality iteration) continues in parallel — incomplete metric coverage is recorded, not hidden.
+
 ## Repository Structure
 
 ```
@@ -98,7 +108,8 @@ mart-forge/
 ├── skills/                       # Agent skills with hard gates
 ├── scripts/                      # DQC update, validation scripts
 ├── docs/                         # Methodology documentation
-├── examples/                     # Conformance exam examples (Phase G)
+├── examples/                     # Conformance trial examples
+│   └── gme-options-mart/         # Live GME public analytics example
 └── tests/                        # Framework validation tests
 ```
 

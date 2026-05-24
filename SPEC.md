@@ -108,9 +108,9 @@ SPEC ──[approve]──► Phase F ──[framework complete]──► Phase 
                                                                       [accept] ──► promotion
 ```
 
-### 4.2 Phase F — Framework Construction
+### 4.2 Phase F — Framework Quality Iteration
 
-**Objective:** Build the framework on `main` with zero example content.
+**Objective:** Build and iteratively improve the framework on `main`. Example content MAY be present as conformance checkpoints; Phase F governs the ongoing quality loop for both the framework and its examples.
 
 **Deliverables:**
 - All templates (BRD, TDD, mart.yml, model SQL, seeds, tests, pipeline, dashboard)
@@ -122,14 +122,15 @@ SPEC ──[approve]──► Phase F ──[framework complete]──► Phase 
 
 **Acceptance:**
 - `main` contains a complete, self-contained framework
-- Zero example-specific content on `main`
+- Example content in `examples/` follows the lifecycle and declares coverage honestly (verified vs pending metrics with numerator/denominator)
 - A data engineer can read the templates/docs and build a mart without seeing an example
 - Plugin installs and session bootstrap fires correctly
 - All skills have hard gates enforced
+- Incomplete metric coverage is visible and recorded, not hidden behind a merge barrier
 
 ### 4.3 Phase G — Conformance Trial
 
-**Gate:** Phase F MUST be complete before any Phase G work.
+**Gate:** Phase F framework deliverables MUST exist before Phase G trials begin. Phase F quality iteration continues in parallel with Phase G work.
 
 #### Shot 1 — Source Discovery, BRD, and TDD
 

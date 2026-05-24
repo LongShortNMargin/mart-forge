@@ -140,7 +140,7 @@ if con is None:
             "Data": "BLOCKED",
             "DQC Verification": m["verification"],
         })
-    st.dataframe(pd.DataFrame(status_data), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(status_data), hide_index=True, width="stretch")
 
     st.info(
         "This dashboard requires a live MotherDuck connection.\n\n"
@@ -207,7 +207,7 @@ if has_snapshot:
         height=350, margin=dict(t=10, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
-    st.plotly_chart(fig_spot, use_container_width=True)
+    st.plotly_chart(fig_spot, width="stretch")
 else:
     st.info("SCHEMA UNVERIFIED — No snapshot data for price/max-pain trend.")
 
@@ -237,7 +237,7 @@ with chart_cols[0]:
             xaxis_title="Strike", yaxis_title="GEX Contribution",
             height=350, margin=dict(t=10, b=40),
         )
-        st.plotly_chart(fig_gex, use_container_width=True)
+        st.plotly_chart(fig_gex, width="stretch")
     else:
         st.info("SCHEMA UNVERIFIED — No GEX data available.")
 
@@ -256,7 +256,7 @@ with chart_cols[1]:
             yaxis_title="P/C Ratio", xaxis_title="Date",
             height=350, margin=dict(t=10, b=40),
         )
-        st.plotly_chart(fig_pc, use_container_width=True)
+        st.plotly_chart(fig_pc, width="stretch")
     else:
         st.info("SCHEMA UNVERIFIED — No snapshot data for P/C trend.")
 
@@ -280,7 +280,7 @@ if has_iv:
         yaxis_title="IV Percentile (%)", xaxis_title="Date",
         height=300, margin=dict(t=10, b=40),
     )
-    st.plotly_chart(fig_iv, use_container_width=True)
+    st.plotly_chart(fig_iv, width="stretch")
 else:
     st.info("Insufficient IV history for percentile calculation.")
 
@@ -304,7 +304,7 @@ if has_gex and not gex_all_df.empty:
         xaxis_title="Strike", yaxis_title="Open Interest",
         height=350, margin=dict(t=10, b=40),
     )
-    st.plotly_chart(fig_oi, use_container_width=True)
+    st.plotly_chart(fig_oi, width="stretch")
 
 st.markdown("---")
 
@@ -340,7 +340,7 @@ with cov_cols[2]:
     pct = (verified_count / total_count * 100) if total_count > 0 else 0
     st.metric("Verified Coverage", f"{pct:.0f}%")
 
-st.dataframe(pd.DataFrame(metric_status), hide_index=True, use_container_width=True)
+st.dataframe(pd.DataFrame(metric_status), hide_index=True, width="stretch")
 
 st.caption(
     "**Data tag semantics:** `[REAL_API]` = loaded from MotherDuck warehouse pipeline. "

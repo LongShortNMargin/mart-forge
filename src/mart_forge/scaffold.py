@@ -754,7 +754,7 @@ def _scaffold_fixture(mart_dir: Path, mart_name: str, prefix: str) -> dict:
         (dash_dir / "app.py").write_text(dash_content)
     files_created.append("dashboard/app.py")
 
-    (dash_dir / "requirements.txt").write_text("streamlit>=1.30\nduckdb>=0.10\n")
+    (dash_dir / "requirements.txt").write_text("streamlit>=1.30\nduckdb>=0.10,<1.5.3\n")
     files_created.append("dashboard/requirements.txt")
 
     # DQC scorecard template
@@ -1239,7 +1239,7 @@ def _scaffold_general(mart_dir: Path, mart_name: str, prefix: str) -> dict:
     (dash_dir / "app.py").write_text(dash_content)
     files_created.append("dashboard/app.py")
 
-    (dash_dir / "requirements.txt").write_text("streamlit>=1.30\nduckdb>=0.10\n")
+    (dash_dir / "requirements.txt").write_text("streamlit>=1.30\nduckdb>=0.10,<1.5.3\n")
     files_created.append("dashboard/requirements.txt")
 
     # DQC scorecard template

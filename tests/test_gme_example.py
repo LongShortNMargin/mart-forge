@@ -113,6 +113,12 @@ class TestDashboardSafety:
         assert "streamlit" in content
         assert "duckdb" in content
 
+    def test_no_deprecated_use_container_width(self):
+        source = DASHBOARD_APP.read_text()
+        assert "use_container_width" not in source, (
+            "Dashboard uses deprecated use_container_width; use width='stretch'"
+        )
+
 
 class TestExampleDocumentation:
     def test_brd_exists(self):
@@ -460,3 +466,48 @@ class TestSpecConsistency:
         assert "conformance checkpoint" in content.lower() or "MAY" in content, (
             "SPEC must acknowledge that example checkpoints coexist with Phase F"
         )
+
+
+class TestDuckDBVersionConstraint:
+    """DuckDB must be upper-bounded to prevent MotherDuck-incompatible releases."""
+
+    DUCKDB_UPPER = "<1.5.3"
+
+    def test_example_dashboard_requirements_constrained(self):
+        req = EXAMPLE_DIR / "dashboard" / "requirements.txt"
+        content = req.read_text()
+        assert self.DUCKDB_UPPER in content, (
+            f"Example dashboard requirements.txt must constrain duckdb with {self.DUCKDB_UPPER}"
+        )
+
+    def test_template_dashboard_requirements_constrained(self):
+        template_req = ROOT / "templates" / "dashboard" / "requirements.txt"
+        if not template_req.exists():
+            return
+        content = template_req.read_text()
+        assert self.DUCKDB_UPPER in content, (
+            f"Template dashboard requirements.txt must constrain duckdb with {self.DUCKDB_UPPER}"
+        )
+
+    def test_pyproject_duckdb_constrained(self):
+        pyproject = ROOT / "pyproject.toml"
+        if not pyproject.exists():
+            return
+        content = pyproject.read_text()
+        for line in content.splitlines():
+            stripped = line.strip().strip('"').strip("'").strip(",")
+            if stripped.startswith("duckdb>="):
+                assert self.DUCKDB_UPPER in line, (
+                    f"pyproject.toml duckdb dependency must include {self.DUCKDB_UPPER}: {line.strip()}"
+                )
+
+    def test_scaffold_emits_constrained_duckdb(self):
+        scaffold = ROOT / "src" / "mart_forge" / "scaffold.py"
+        if not scaffold.exists():
+            return
+        content = scaffold.read_text()
+        for i, line in enumerate(content.splitlines(), 1):
+            if "duckdb>=" in line and "requirements" in line.lower():
+                assert self.DUCKDB_UPPER in line, (
+                    f"scaffold.py L{i} emits unconstrained duckdb: {line.strip()}"
+                )

@@ -125,8 +125,8 @@ The following TDD sections are not yet populated for this MVP checkpoint:
 
 | Section | Title | Status |
 |---------|-------|--------|
-| T-7 | Dimension Table Design | `pending` — only `dim_date` exists, inline strike dimensions |
-| T-8 | Fact Table Design | `pending` — DWS aggregates directly from ODS |
+| T-7 | Dimension Table Design | `pending` — proposed design includes `dim_date`; strike dimensions inline; pending live schema verification |
+| T-8 | Fact Table Design | `pending` — proposed design has DWS aggregating from ODS; pending live schema verification |
 | T-9 | Count Aggregation Design | `pending` |
 | T-10 | Performance Aggregation Design | `pending` |
 | T-11 | Presentation Table Design | `pending` — no ADS/OBT layer yet |
@@ -164,8 +164,8 @@ These sections are required for full TDD sign-off and will be populated during P
 ## T-17: Known Limitations
 
 - All tables and layers below are proposed checkpoint design pending live schema verification
-- DWD layer is not present in the proposed design — DWS tables aggregate directly from ODS
-- No DIM tables beyond `dim_date` — strike/expiry dimensions are inline
+- DWD layer is not present in the proposed design — proposed flow has DWS aggregating from ODS; pending live schema verification
+- Proposed design includes only `dim_date` — strike/expiry dimensions are inline; pending live schema verification
 - IV percentile calculated from internal history only (no external IV rank comparison)
 - GEX formula uses simplified gamma; commercial providers may use different models
 - No 7d/30d trailing aggregation tables yet

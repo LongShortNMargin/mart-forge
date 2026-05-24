@@ -332,6 +332,54 @@ class TestTddTheoreticalPlaceholders:
         )
 
 
+class TestTddNoFactualExistence:
+    """TDD incomplete sections and known-limitations must not assert that
+    layers/tables/flows currently exist. Wording must reflect proposed
+    checkpoint design pending live schema verification."""
+
+    FACTUAL_PATTERNS = [
+        re.compile(r"\bonly\s+`?dim_date`?\s+exists\b", re.IGNORECASE),
+        re.compile(r"\bDWS\s+aggregates?\s+directly\s+from\s+ODS\b", re.IGNORECASE),
+        re.compile(r"\b(?:table|layer|dimension)\s+(?:exists?|is live|is deployed)\b", re.IGNORECASE),
+    ]
+
+    def test_tdd_incomplete_sections_no_factual_existence(self):
+        content = (EXAMPLE_DIR / "tech-design-doc.md").read_text()
+        in_incomplete = False
+        violations = []
+        for i, line in enumerate(content.splitlines(), 1):
+            if "Incomplete Sections" in line:
+                in_incomplete = True
+                continue
+            if in_incomplete and line.startswith("## "):
+                in_incomplete = False
+            if in_incomplete:
+                for pat in self.FACTUAL_PATTERNS:
+                    if pat.search(line):
+                        violations.append(f"L{i}: {line.strip()[:120]}")
+        assert not violations, (
+            "TDD incomplete sections assert factual existence:\n" + "\n".join(violations)
+        )
+
+    def test_tdd_known_limitations_no_factual_existence(self):
+        content = (EXAMPLE_DIR / "tech-design-doc.md").read_text()
+        in_limitations = False
+        violations = []
+        for i, line in enumerate(content.splitlines(), 1):
+            if "Known Limitations" in line:
+                in_limitations = True
+                continue
+            if in_limitations and line.startswith("## "):
+                in_limitations = False
+            if in_limitations:
+                for pat in self.FACTUAL_PATTERNS:
+                    if pat.search(line):
+                        violations.append(f"L{i}: {line.strip()[:120]}")
+        assert not violations, (
+            "TDD known-limitations assert factual existence:\n" + "\n".join(violations)
+        )
+
+
 class TestSpecConsistency:
     def test_spec_phase_f_allows_examples(self):
         if not SPEC_PATH.exists():

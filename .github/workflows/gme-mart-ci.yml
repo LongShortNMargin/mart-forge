@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install dbt-duckdb==1.11.3
+          pip install dbt-duckdb>=1.10.0
 
       - name: dbt seed
         run: dbt seed --profiles-dir .

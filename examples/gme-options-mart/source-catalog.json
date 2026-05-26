@@ -186,7 +186,7 @@
           "asset": "v7/finance/options/GME (via yfinance SDK)",
           "fields": ["strike", "openInterest"],
           "source_type": "derived",
-          "link_status": "proxy",
+          "link_status": "unsupported",
           "verification": {
             "availability": "pass",
             "asset_identity": "pass",
@@ -195,7 +195,7 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: for each candidate strike K, sum intrinsic-value losses across all call OI (max(0, K-strike)*OI) and put OI (max(0, strike-K)*OI). The K that minimizes total losses is max pain. OI data verified available per strike. Link status downgraded to proxy: maximum-pain.com has a GME calculator but content is JavaScript-rendered; exact methodology not verifiable via static fetch.",
+          "notes": "Derived: for each candidate strike K, sum intrinsic-value losses across all call OI (max(0, K-strike)*OI) and put OI (max(0, strike-K)*OI). The K that minimizes total losses is max pain. OI data verified available per strike. Link status: unsupported — Maximum-Pain.com shows max pain but methodology may differ; no exact match confirmed via browser render.",
           "independent_comparator": {
             "provider": "Maximum-Pain.com",
             "url": "https://maximum-pain.com/options/GME",
@@ -256,7 +256,7 @@
           "asset": "v7/finance/options/GME (via yfinance SDK) + v8/finance/chart/GME",
           "fields": ["strike", "openInterest", "impliedVolatility", "close"],
           "source_type": "derived",
-          "link_status": "proxy",
+          "link_status": "unsupported",
           "verification": {
             "availability": "pass",
             "asset_identity": "pass",
@@ -265,7 +265,7 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: gamma is computed via Black-Scholes (N'(d1) / (S * sigma * sqrt(T))) using per-strike IV, spot price, and DTE. GEX per strike = gamma * OI * 100 * spot. Net GEX = SUM(call_GEX) - SUM(put_GEX). All input fields verified available. Risk-free rate assumed from US Treasury yield [THEORETICAL]. Link status downgraded to proxy: Barchart GEX page exists for GME but chart data failed to load at verification time; methodology not verifiable.",
+          "notes": "Derived: gamma is computed via Black-Scholes (N'(d1) / (S * sigma * sqrt(T))) using per-strike IV, spot price, and DTE. GEX per strike = gamma * OI * 100 * spot. Net GEX = SUM(call_GEX) - SUM(put_GEX). All input fields verified available. Risk-free rate assumed from US Treasury yield [THEORETICAL]. Link status: unsupported — Barchart shows gamma exposure chart but individual net GEX value not rendered as a single comparable number.",
           "independent_comparator": {
             "provider": "Barchart",
             "url": "https://www.barchart.com/stocks/quotes/GME/gamma-exposure",

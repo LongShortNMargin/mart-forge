@@ -32,9 +32,9 @@ Refer to `business-requirements.md` (B-2) for full stakeholder context and domai
 | IV per Strike  | Implied volatility per option contract | native | exact | pass-through from Yahoo Finance impliedVolatility field | gme_ods_yahoo_options |
 | IV30           | 30-day interpolated ATM implied volatility | derived | proxy | Interpolate ATM IV from two expirations bracketing 30 DTE | gme_ads_daily_summary |
 | HV20           | 20-day annualized realized volatility | derived | proxy | STDDEV(LN(close/prev_close)) * SQRT(252) over 20 trading days | gme_ads_daily_summary |
-| Max Pain       | Strike minimizing total option intrinsic value | derived | proxy | Cross-join strikes × OI, minimize total intrinsic loss | gme_ads_daily_summary |
+| Max Pain       | Strike minimizing total option intrinsic value | derived | unsupported | Cross-join strikes × OI, minimize total intrinsic loss | gme_ads_daily_summary |
 | P/C Ratio      | Put-to-call open interest ratio | derived | exact | SUM(put_oi) / NULLIF(SUM(call_oi), 0) | gme_ads_daily_summary |
-| Net GEX        | Net gamma exposure across all strikes | derived | proxy | SUM(call_gex) - SUM(put_gex) where gex = bs_gamma * oi * 100 * spot | gme_ads_daily_summary |
+| Net GEX        | Net gamma exposure across all strikes | derived | unsupported | SUM(call_gex) - SUM(put_gex) where gex = bs_gamma * oi * 100 * spot | gme_ads_daily_summary |
 | IV Rank        | Percentile rank of IV30 in 252-day range | derived | proxy | (iv30 - MIN(iv30) over 252d) / NULLIF(MAX(iv30) - MIN(iv30) over 252d, 0) | gme_ads_daily_summary |
 
 ---
@@ -249,7 +249,7 @@ The `risk_free_rate` variable is used in the Black-Scholes gamma computation (DW
 | implied_volatility | DOUBLE    | Annualized IV (decimal)                            | 0.85                | pass-through                                                | gme_ods_yahoo_options      |
 | dte                | INTEGER   | Days to expiration                                 | 2                   | `expiration_date - trade_date`                              | derived                    |
 | dte_annual_frac    | DOUBLE    | DTE as fraction of year                            | 0.00794             | `CAST(dte AS DOUBLE) / 365.0`                              | derived                    |
-| d1                 | DOUBLE    | Black-Scholes d1 parameter                         | 0.312               | `(LN(spot_close / strike) + (rfr + 0.5 * implied_volatility * implied_volatility) * dte_annual_frac) / (implied_volatility * SQRT(dte_annual_frac))` | derived |
+| d1                 | DOUBLE    | Black-Scholes d1 parameter                         | 0.312               | `(LN(spot_close / strike) + (risk_free_rate + 0.5 * implied_volatility * implied_volatility) * dte_annual_frac) / (implied_volatility * SQRT(dte_annual_frac))` | derived |
 | bs_gamma           | DOUBLE    | Black-Scholes gamma                                | 0.15                | `EXP(-0.5 * d1 * d1) / (SQRT(2 * PI()) * spot_close * implied_volatility * SQRT(dte_annual_frac))` | derived |
 | gex_per_strike     | DOUBLE    | Gamma exposure for this contract                   | 166125.0            | `bs_gamma * open_interest * 100 * spot_close`              | derived                    |
 | is_atm             | BOOLEAN   | Whether this strike is nearest to spot             | true                | `ABS(strike - spot_close) = MIN(ABS(strike - spot_close)) OVER (PARTITION BY trade_date, expiration_date, option_type)` | derived |
@@ -296,9 +296,9 @@ WITH strike_pain AS (
     CROSS JOIN (
         SELECT DISTINCT strike
         FROM gme_dwd_options_daily
-        WHERE trade_date = (SELECT MAX(trade_date) FROM gme_dwd_options_daily)
+        WHERE trade_date = (SELECT MAX(pull_date) FROM gme_dwd_options_daily)
     ) candidate
-    WHERE oc.trade_date = (SELECT MAX(trade_date) FROM gme_dwd_options_daily)
+    WHERE oc.trade_date = (SELECT MAX(pull_date) FROM gme_dwd_options_daily)
     GROUP BY candidate.strike, oc.trade_date, oc.expiration_date
 ),
 ranked AS (
@@ -494,7 +494,7 @@ scripts/
 | L-1  | Yahoo Finance provides 15-minute delayed data; end-of-day pipeline only.               | No intraday signal capability.                  | Accept for daily-grain mart; label timestamps.  |
 | L-2  | Greeks (gamma) must be derived via Black-Scholes; not natively available.               | Computation adds complexity; gamma accuracy depends on model assumptions. | Use standard Black-Scholes with explicitly documented assumptions (risk-free rate, no dividends). |
 | L-3  | IV Rank requires 252 trading days of IV30 history for full accuracy.                   | First-year values use shorter lookback.          | Display lookback window count; label as provisional until threshold. |
-| L-4  | Risk-free rate must be seeded externally.                                               | GEX values shift slightly with rate changes.     | Use US Treasury 3-month yield seed; refresh monthly. |
+| L-4  | Risk-free rate must be seeded externally.                                               | GEX values shift slightly with rate changes.     | Use US 10-year Treasury yield seed; refresh monthly. [THEORETICAL] |
 | L-5  | No historical options chain data via Yahoo Finance; only current-day snapshot.          | Cannot backfill historical GEX, max pain, P/C.   | Pipeline accumulates forward from first run date. |
 | L-6  | Max pain calculation uses brute-force cross-join across all strikes; O(S^2) per expiration. | Performance scales quadratically with strike count. | GME typically has < 50 strikes per expiration; acceptable at current scale. |
 

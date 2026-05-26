@@ -67,9 +67,9 @@ Enable daily monitoring of GME options positioning — including implied volatil
 | IV per Strike  | Implied volatility per option contract as quoted by exchange | native | exact | public | yfinance returned impliedVolatility field on every option row; ATM call IV ~2.55 for nearest expiry |
 | IV30           | 30-day interpolated at-the-money implied volatility | derived | proxy | public | Derived from native IV per Strike using linear interpolation across expirations bracketing 30 DTE; all inputs verified. Proxy: Barchart shows aggregate IV but methodology undisclosed. |
 | HV20           | 20-day annualized realized volatility from close prices | derived | proxy | public | Derived from native Spot Price close history; 62+ trading days of close data verified available. Proxy: Barchart shows 30-day HV, not 20-day; different lookback window. |
-| Max Pain       | Strike minimizing total intrinsic value of outstanding options | derived | proxy | public | Derived from native OI by Strike via cross-join optimization; OI data verified per strike. Proxy: maximum-pain.com has GME calculator but JS-rendered; methodology not verifiable. |
+| Max Pain       | Strike minimizing total intrinsic value of outstanding options | derived | unsupported | public | Derived from native OI by Strike via cross-join optimization; OI data verified per strike. Unsupported: Maximum-Pain.com shows max pain but methodology may differ; no exact match confirmed via browser render. |
 | P/C Ratio      | Put-to-call open interest ratio | derived | exact | public | Derived from native OI by Strike: SUM(put OI) / SUM(call OI); both OI fields verified populated. Verified exact against Barchart P/C OI Ratio. |
-| Net GEX        | Net gamma exposure across all strikes | derived | proxy | public | Derived from native IV per Strike + OI by Strike + Spot Price via Black-Scholes gamma computation; all inputs verified. Proxy: Barchart GEX page exists but data load failed at verification time. |
+| Net GEX        | Net gamma exposure across all strikes | derived | unsupported | public | Derived from native IV per Strike + OI by Strike + Spot Price via Black-Scholes gamma computation; all inputs verified. Unsupported: Barchart shows gamma exposure chart but individual net GEX value not rendered as a single comparable number. |
 | IV Rank        | Percentile rank of current IV30 in trailing 252-day range | derived | proxy | public | Derived from accumulated daily IV30 snapshots; proxy status because initial period uses shorter lookback window; upgrades to exact after 252 days of accumulation |
 
 ### source_type Legend
@@ -97,7 +97,7 @@ Enable daily monitoring of GME options positioning — including implied volatil
 | L-2  | Yahoo Finance does not expose option Greeks (delta, gamma, theta, vega) directly.      | GEX computation requires Black-Scholes derivation. | Implement Black-Scholes gamma from IV, spot, DTE, and risk-free rate. |
 | L-3  | IV Rank requires 252 trading days of accumulated IV30 history to be fully accurate.    | First-year IV Rank values use a shorter lookback. | Label IV Rank as "provisional" until 252-day threshold reached; display lookback window in dashboard. |
 | L-4  | No free provider offers pre-computed IV30, Max Pain, GEX, or IV Rank for individual equities. | All advanced metrics must be computed within the pipeline. | All derivation logic specified in TDD with exact SQL; validated against known calculation methods. |
-| L-5  | Risk-free rate for Black-Scholes not available from Yahoo Finance; requires external assumption or seed. | GEX accuracy depends on rate assumption.        | Use US Treasury 3-month yield as seed; refresh monthly or on significant rate changes. |
+| L-5  | Risk-free rate for Black-Scholes not available from Yahoo Finance; requires external assumption or seed. | GEX accuracy depends on rate assumption.        | Use US 10-year Treasury yield as seed; refresh monthly or on significant rate changes. [THEORETICAL] |
 
 ### Unsupported Metrics
 

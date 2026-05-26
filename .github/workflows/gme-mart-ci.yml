@@ -1,0 +1,36 @@
+name: GME Options Mart CI
+
+on:
+  push:
+    paths:
+      - 'examples/gme-options-mart/**'
+  pull_request:
+    paths:
+      - 'examples/gme-options-mart/**'
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/gme-options-mart
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install dbt-duckdb>=1.10.0
+
+      - name: dbt seed
+        run: dbt seed --profiles-dir .
+
+      - name: dbt run
+        run: dbt run --profiles-dir .
+
+      - name: dbt test
+        run: dbt test --profiles-dir .

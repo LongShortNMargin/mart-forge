@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat production/session-state/active.md 2>/dev/null || echo 'No active session state. Run /source-discovery to begin.'",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

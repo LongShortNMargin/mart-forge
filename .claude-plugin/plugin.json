@@ -1,0 +1,7 @@
+{
+  "name": "mart-forge",
+  "version": "3.0.0",
+  "description": "Methodology-first Kimball DWH scaffolding and review framework",
+  "skills_directory": ".claude/skills",
+  "hooks_directory": "hooks"
+}

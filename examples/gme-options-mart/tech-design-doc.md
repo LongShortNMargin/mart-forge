@@ -30,11 +30,11 @@ Refer to `business-requirements.md` (B-2) for full stakeholder context and domai
 | Spot Price     | Current/last closing price of GME on NYSE | native | exact | pass-through from Yahoo Finance close field | gme_ods_yahoo_spot |
 | OI by Strike   | Open interest per strike per expiration for calls and puts | native | exact | pass-through from Yahoo Finance openInterest field | gme_ods_yahoo_options |
 | IV per Strike  | Implied volatility per option contract | native | exact | pass-through from Yahoo Finance impliedVolatility field | gme_ods_yahoo_options |
-| IV30           | 30-day interpolated ATM implied volatility | derived | exact | Interpolate ATM IV from two expirations bracketing 30 DTE | gme_ads_daily_summary |
-| HV20           | 20-day annualized realized volatility | derived | exact | STDDEV(LN(close/prev_close)) * SQRT(252) over 20 trading days | gme_ads_daily_summary |
-| Max Pain       | Strike minimizing total option intrinsic value | derived | exact | Cross-join strikes × OI, minimize total intrinsic loss | gme_ads_daily_summary |
+| IV30           | 30-day interpolated ATM implied volatility | derived | proxy | Interpolate ATM IV from two expirations bracketing 30 DTE | gme_ads_daily_summary |
+| HV20           | 20-day annualized realized volatility | derived | proxy | STDDEV(LN(close/prev_close)) * SQRT(252) over 20 trading days | gme_ads_daily_summary |
+| Max Pain       | Strike minimizing total option intrinsic value | derived | proxy | Cross-join strikes × OI, minimize total intrinsic loss | gme_ads_daily_summary |
 | P/C Ratio      | Put-to-call open interest ratio | derived | exact | SUM(put_oi) / NULLIF(SUM(call_oi), 0) | gme_ads_daily_summary |
-| Net GEX        | Net gamma exposure across all strikes | derived | exact | SUM(call_gex) - SUM(put_gex) where gex = bs_gamma * oi * 100 * spot | gme_ads_daily_summary |
+| Net GEX        | Net gamma exposure across all strikes | derived | proxy | SUM(call_gex) - SUM(put_gex) where gex = bs_gamma * oi * 100 * spot | gme_ads_daily_summary |
 | IV Rank        | Percentile rank of IV30 in 252-day range | derived | proxy | (iv30 - MIN(iv30) over 252d) / NULLIF(MAX(iv30) - MIN(iv30) over 252d, 0) | gme_ads_daily_summary |
 
 ---
@@ -131,6 +131,15 @@ Yahoo Finance API
 ---
 
 ## T-9: ODS Table Columns
+
+### dbt Project Variables
+
+```yaml
+vars:
+  risk_free_rate: 0.043  # US 10-year Treasury yield [THEORETICAL]
+```
+
+The `risk_free_rate` variable is used in the Black-Scholes gamma computation (DWD layer, `gme_dwd_options_daily.d1` and `gme_dwd_options_daily.bs_gamma`). Source tag: `[THEORETICAL]` — this is a static approximation seeded from the US 10-year Treasury yield, not a live data feed. Refresh monthly or on significant rate changes. See BRD constraint L-5.
 
 ### ODS Contract Table — gme_ods_yahoo_spot
 
@@ -262,7 +271,56 @@ Yahoo Finance API
 | call_gex_total       | DOUBLE    | Total call gamma exposure                           | 500000.0       | `SUM(gex_per_strike) WHERE option_type = 'call'`                                 | gme_dwd_options_daily   |
 | put_gex_total        | DOUBLE    | Total put gamma exposure                            | 350000.0       | `SUM(gex_per_strike) WHERE option_type = 'put'`                                  | gme_dwd_options_daily   |
 | net_gex_expiry       | DOUBLE    | Net GEX for this expiration                         | 150000.0       | `call_gex_total - put_gex_total`                                                  | derived                 |
-| max_pain_strike      | DOUBLE    | Max pain strike for this expiration                 | 22.00          | Strike K that minimizes: `SUM(CASE WHEN option_type='call' THEN GREATEST(0, K - strike) * open_interest ELSE GREATEST(0, strike - K) * open_interest END)` across all strikes | derived |
+| max_pain_strike      | DOUBLE    | Max pain strike for this expiration                 | 22.00          | See executable SQL below | derived |
+
+#### Max Pain Executable SQL
+
+```sql
+-- Max pain: for each candidate strike, sum total pain (intrinsic value loss
+-- to option holders) across all OI. The strike with minimum total pain is max pain.
+WITH strike_pain AS (
+    SELECT
+        candidate.strike AS pain_strike,
+        oc.trade_date,
+        oc.expiration_date,
+        SUM(
+            CASE
+                WHEN oc.option_type = 'call' AND oc.strike < candidate.strike
+                    THEN (candidate.strike - oc.strike) * oc.open_interest
+                WHEN oc.option_type = 'put' AND oc.strike > candidate.strike
+                    THEN (oc.strike - candidate.strike) * oc.open_interest
+                ELSE 0
+            END
+        ) AS total_pain
+    FROM gme_dwd_options_daily oc
+    CROSS JOIN (
+        SELECT DISTINCT strike
+        FROM gme_dwd_options_daily
+        WHERE trade_date = (SELECT MAX(trade_date) FROM gme_dwd_options_daily)
+    ) candidate
+    WHERE oc.trade_date = (SELECT MAX(trade_date) FROM gme_dwd_options_daily)
+    GROUP BY candidate.strike, oc.trade_date, oc.expiration_date
+),
+ranked AS (
+    SELECT
+        pain_strike,
+        trade_date,
+        expiration_date,
+        total_pain,
+        ROW_NUMBER() OVER (
+            PARTITION BY trade_date, expiration_date
+            ORDER BY total_pain ASC
+        ) AS rn
+    FROM strike_pain
+)
+SELECT
+    trade_date,
+    expiration_date,
+    pain_strike AS max_pain_strike,
+    total_pain
+FROM ranked
+WHERE rn = 1
+```
 | atm_call_iv          | DOUBLE    | ATM call implied volatility                         | 0.85           | `implied_volatility WHERE is_atm = true AND option_type = 'call'`                | gme_dwd_options_daily   |
 | atm_put_iv           | DOUBLE    | ATM put implied volatility                          | 0.90           | `implied_volatility WHERE is_atm = true AND option_type = 'put'`                 | gme_dwd_options_daily   |
 | strike_count         | INTEGER   | Number of distinct strikes listed                   | 38             | `COUNT(DISTINCT strike)`                                                          | gme_dwd_options_daily   |

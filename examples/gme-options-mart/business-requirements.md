@@ -65,11 +65,11 @@ Enable daily monitoring of GME options positioning — including implied volatil
 | Spot Price     | Current/last closing price of GME on NYSE | native | exact | public | Yahoo Finance v8/finance/chart/GME returned close=22.15 USD, confirmed GameStop Corp. on NYSE |
 | OI by Strike   | Open interest per strike per expiration for calls and puts | native | exact | public | yfinance returned openInterest for 38 call + 36 put strikes across 17 expirations; non-zero OI confirmed |
 | IV per Strike  | Implied volatility per option contract as quoted by exchange | native | exact | public | yfinance returned impliedVolatility field on every option row; ATM call IV ~2.55 for nearest expiry |
-| IV30           | 30-day interpolated at-the-money implied volatility | derived | exact | public | Derived from native IV per Strike using linear interpolation across expirations bracketing 30 DTE; all inputs verified |
-| HV20           | 20-day annualized realized volatility from close prices | derived | exact | public | Derived from native Spot Price close history; 62+ trading days of close data verified available |
-| Max Pain       | Strike minimizing total intrinsic value of outstanding options | derived | exact | public | Derived from native OI by Strike via cross-join optimization; OI data verified per strike |
-| P/C Ratio      | Put-to-call open interest ratio | derived | exact | public | Derived from native OI by Strike: SUM(put OI) / SUM(call OI); both OI fields verified populated |
-| Net GEX        | Net gamma exposure across all strikes | derived | exact | public | Derived from native IV per Strike + OI by Strike + Spot Price via Black-Scholes gamma computation; all inputs verified |
+| IV30           | 30-day interpolated at-the-money implied volatility | derived | proxy | public | Derived from native IV per Strike using linear interpolation across expirations bracketing 30 DTE; all inputs verified. Proxy: Barchart shows aggregate IV but methodology undisclosed. |
+| HV20           | 20-day annualized realized volatility from close prices | derived | proxy | public | Derived from native Spot Price close history; 62+ trading days of close data verified available. Proxy: Barchart shows 30-day HV, not 20-day; different lookback window. |
+| Max Pain       | Strike minimizing total intrinsic value of outstanding options | derived | proxy | public | Derived from native OI by Strike via cross-join optimization; OI data verified per strike. Proxy: maximum-pain.com has GME calculator but JS-rendered; methodology not verifiable. |
+| P/C Ratio      | Put-to-call open interest ratio | derived | exact | public | Derived from native OI by Strike: SUM(put OI) / SUM(call OI); both OI fields verified populated. Verified exact against Barchart P/C OI Ratio. |
+| Net GEX        | Net gamma exposure across all strikes | derived | proxy | public | Derived from native IV per Strike + OI by Strike + Spot Price via Black-Scholes gamma computation; all inputs verified. Proxy: Barchart GEX page exists but data load failed at verification time. |
 | IV Rank        | Percentile rank of current IV30 in trailing 252-day range | derived | proxy | public | Derived from accumulated daily IV30 snapshots; proxy status because initial period uses shorter lookback window; upgrades to exact after 252 days of accumulation |
 
 ### source_type Legend

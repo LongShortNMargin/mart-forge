@@ -22,7 +22,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "end-of-day; intraday available during market hours",
-          "notes": "Verified 2026-05-27: returned GME (GameStop Corp.) close=22.15 USD on NYSE. Free tier, no API key required for delayed data."
+          "notes": "Verified 2026-05-27: returned GME (GameStop Corp.) close=22.15 USD on NYSE. Free tier, no API key required for delayed data.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/overview",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GameStop Corp (GME) confirmed on Barchart overview page",
+            "rendered_metric_identity": "Current price $22.14, plus open/high/low/close, volume, 52-week range",
+            "candidate_result": "exact_match",
+            "evidence": "Page shows GME spot price $22.14 with full OHLCV data. Price matches Yahoo Finance close within market delay tolerance. Independent source confirms same metric and methodology."
+          }
         }
       ],
       "exhaustion_log": []
@@ -47,7 +56,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "end-of-day; 15-minute delayed during market hours",
-          "notes": "Verified 2026-05-27: yfinance returned 38 call strikes and 36 put strikes for nearest expiration (2026-05-29). 17 expirations available. OI confirmed non-zero across multiple strikes."
+          "notes": "Verified 2026-05-27: yfinance returned 38 call strikes and 36 put strikes for nearest expiration (2026-05-29). 17 expirations available. OI confirmed non-zero across multiple strikes.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/options",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GME Options Prices for Gamestop Corp Stock on Barchart",
+            "rendered_metric_identity": "Open interest by strike for calls and puts, with bid/ask, volume, delta, IV per contract across multiple expirations",
+            "candidate_result": "exact_match",
+            "evidence": "Page displays full options chain with OI by strike for both calls and puts. Includes Put OI Total and Call OI Total aggregations. Independent source confirms same metric (OI per strike per expiration per option type)."
+          }
         }
       ],
       "exhaustion_log": []
@@ -72,7 +90,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "end-of-day; 15-minute delayed during market hours",
-          "notes": "Verified 2026-05-27: impliedVolatility field present and populated on every option row (e.g., ATM call IV ~2.55 for 2026-05-29 expiry). Values are annualized decimals."
+          "notes": "Verified 2026-05-27: impliedVolatility field present and populated on every option row (e.g., ATM call IV ~2.55 for 2026-05-29 expiry). Values are annualized decimals.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/volatility-greeks",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GME Options Volatility & Greeks for Gamestop Corp Stock on Barchart",
+            "rendered_metric_identity": "Implied Volatility per option contract displayed alongside Greeks (delta, gamma, theta, vega, rho) per strike per expiration",
+            "candidate_result": "exact_match",
+            "evidence": "Page shows IV per strike per option type with full Greeks. IV defined as 'estimated volatility of the underlying stock over the period of the option'. Independent source confirms same metric and methodology."
+          }
         }
       ],
       "exhaustion_log": []
@@ -88,7 +115,7 @@
           "asset": "v7/finance/options/GME (via yfinance SDK)",
           "fields": ["impliedVolatility", "strike", "expirationDate"],
           "source_type": "derived",
-          "link_status": "exact",
+          "link_status": "proxy",
           "verification": {
             "availability": "pass",
             "asset_identity": "pass",
@@ -97,7 +124,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: select ATM options (strike nearest to spot) from the two expirations bracketing 30 DTE, then linearly interpolate their IV. Source fields (impliedVolatility, strike) verified available."
+          "notes": "Derived: select ATM options (strike nearest to spot) from the two expirations bracketing 30 DTE, then linearly interpolate their IV. Source fields (impliedVolatility, strike) verified available. Link status downgraded to proxy: Barchart shows an aggregate 'Implied Volatility' figure (48.55%) but does not disclose whether it uses the same 30-DTE ATM interpolation methodology.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/volatility-greeks",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GME Options Volatility & Greeks for Gamestop Corp Stock on Barchart",
+            "rendered_metric_identity": "Implied Volatility 48.55% shown as aggregate; methodology undisclosed (may not match our 30-DTE ATM linear interpolation)",
+            "candidate_result": "advisory_proxy",
+            "evidence": "Barchart shows IV=48.55% for GME. Our IV30 is derived via ATM interpolation across expirations bracketing 30 DTE. Barchart's aggregate IV methodology is undisclosed. Directional validation only."
+          }
         }
       ],
       "exhaustion_log": [
@@ -116,7 +152,7 @@
           "asset": "v8/finance/chart/GME",
           "fields": ["close"],
           "source_type": "derived",
-          "link_status": "exact",
+          "link_status": "proxy",
           "verification": {
             "availability": "pass",
             "asset_identity": "pass",
@@ -125,7 +161,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: HV20 = STDDEV(LN(close[t]/close[t-1])) over 20 trading days, annualized by * SQRT(252). Verified 62+ trading days of close prices available."
+          "notes": "Derived: HV20 = STDDEV(LN(close[t]/close[t-1])) over 20 trading days, annualized by * SQRT(252). Verified 62+ trading days of close prices available. Link status downgraded to proxy: Barchart shows 30-day HV (51.93%), not 20-day. Different lookback window means directional validation only.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/volatility-greeks",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GME Options Volatility & Greeks for Gamestop Corp Stock on Barchart",
+            "rendered_metric_identity": "Historical Volatility 51.93% shown as '30-day historic volatility for the underlying asset'",
+            "candidate_result": "advisory_proxy",
+            "evidence": "Barchart shows 30-day HV=51.93% for GME. Our HV20 uses a 20-trading-day window. Different lookback windows (30-day vs 20-day) mean values will differ systematically. Directional validation only."
+          }
         }
       ],
       "exhaustion_log": []
@@ -141,7 +186,7 @@
           "asset": "v7/finance/options/GME (via yfinance SDK)",
           "fields": ["strike", "openInterest"],
           "source_type": "derived",
-          "link_status": "exact",
+          "link_status": "proxy",
           "verification": {
             "availability": "pass",
             "asset_identity": "pass",
@@ -150,7 +195,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: for each candidate strike K, sum intrinsic-value losses across all call OI (max(0, K-strike)*OI) and put OI (max(0, strike-K)*OI). The K that minimizes total losses is max pain. OI data verified available per strike."
+          "notes": "Derived: for each candidate strike K, sum intrinsic-value losses across all call OI (max(0, K-strike)*OI) and put OI (max(0, strike-K)*OI). The K that minimizes total losses is max pain. OI data verified available per strike. Link status downgraded to proxy: maximum-pain.com has a GME calculator but content is JavaScript-rendered; exact methodology not verifiable via static fetch.",
+          "independent_comparator": {
+            "provider": "Maximum-Pain.com",
+            "url": "https://maximum-pain.com/options/GME",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "Stock Option Max Pain Calculator page; GME-specific data requires JavaScript rendering",
+            "rendered_metric_identity": "Max pain calculator available but specific GME strike value not renderable via static HTTP fetch (JS-only SPA)",
+            "candidate_result": "advisory_proxy",
+            "evidence": "Page returned HTTP 200 with max pain calculator framework. GME ticker is recognized by the site. However, actual max pain strike data is rendered client-side via JavaScript and was not present in static HTML. Cannot verify exact methodology match. Directional validation only if accessed interactively."
+          }
         }
       ],
       "exhaustion_log": [
@@ -177,7 +231,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: SUM(put.openInterest) / SUM(call.openInterest). Both call and put OI fields verified present and populated across all strikes."
+          "notes": "Derived: SUM(put.openInterest) / SUM(call.openInterest). Both call and put OI fields verified present and populated across all strikes.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/put-call-ratios",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GME Put/Call Ratios for Gamestop Corp Stock on Barchart",
+            "rendered_metric_identity": "Put/Call Open Interest Ratio 0.35 (Put OI Total: 367,852; Call OI Total: 1,047,392). Also shows Put/Call Volume Ratio 0.11.",
+            "candidate_result": "exact_match",
+            "evidence": "Barchart shows Put/Call Open Interest Ratio = 0.35 for GME, computed as total put OI / total call OI. Same methodology as our derivation: SUM(put OI) / SUM(call OI). Independent source confirms exact metric match."
+          }
         }
       ],
       "exhaustion_log": []
@@ -193,7 +256,7 @@
           "asset": "v7/finance/options/GME (via yfinance SDK) + v8/finance/chart/GME",
           "fields": ["strike", "openInterest", "impliedVolatility", "close"],
           "source_type": "derived",
-          "link_status": "exact",
+          "link_status": "proxy",
           "verification": {
             "availability": "pass",
             "asset_identity": "pass",
@@ -202,7 +265,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily",
-          "notes": "Derived: gamma is computed via Black-Scholes (N'(d1) / (S * sigma * sqrt(T))) using per-strike IV, spot price, and DTE. GEX per strike = gamma * OI * 100 * spot. Net GEX = SUM(call_GEX) - SUM(put_GEX). All input fields verified available. Risk-free rate assumed from US Treasury yield."
+          "notes": "Derived: gamma is computed via Black-Scholes (N'(d1) / (S * sigma * sqrt(T))) using per-strike IV, spot price, and DTE. GEX per strike = gamma * OI * 100 * spot. Net GEX = SUM(call_GEX) - SUM(put_GEX). All input fields verified available. Risk-free rate assumed from US Treasury yield [THEORETICAL]. Link status downgraded to proxy: Barchart GEX page exists for GME but chart data failed to load at verification time; methodology not verifiable.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/gamma-exposure",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "Gamestop Corp (GME) Gamma Exposure page on Barchart; page framework loaded with IV=48.55%, HV=51.93%, IV Rank=16.75%",
+            "rendered_metric_identity": "Gamma Exposure chart framework present (call gamma vs put gamma by strike, net GEX) but data load failed with 'Error occurred while loading data'",
+            "candidate_result": "advisory_proxy",
+            "evidence": "Barchart has a dedicated GEX page for GME with configurable expiration and strike parameters. Page confirmed GME identity (ticker, IV, HV metrics displayed). However, the actual GEX chart data returned a load error at capture time. Cannot verify values or exact methodology. Directional validation only when data loads successfully."
+          }
         }
       ],
       "exhaustion_log": [
@@ -230,7 +302,16 @@
             "semantic_match": "pass"
           },
           "freshness_cadence": "daily (requires historical accumulation)",
-          "notes": "Derived: IV Rank = (current_IV30 - min_IV30_252d) / (max_IV30_252d - min_IV30_252d). Requires the pipeline to accumulate daily IV30 snapshots over 252 trading days before this metric becomes fully accurate. Link status is 'proxy' because the initial period will use a shorter lookback window. After 252 days of accumulation, link status upgrades to 'exact'."
+          "notes": "Derived: IV Rank = (current_IV30 - min_IV30_252d) / (max_IV30_252d - min_IV30_252d). Requires the pipeline to accumulate daily IV30 snapshots over 252 trading days before this metric becomes fully accurate. Link status remains 'proxy': Barchart shows IV Rank=16.75% using their own IV baseline and 1-year lookback; our pipeline uses self-computed IV30 which may diverge. Additionally, the initial accumulation period uses a shorter lookback window.",
+          "independent_comparator": {
+            "provider": "Barchart",
+            "url": "https://www.barchart.com/stocks/quotes/GME/volatility-greeks",
+            "capture_timestamp": "2026-05-27T12:00:00Z",
+            "rendered_asset_identity": "GME Options Volatility & Greeks for Gamestop Corp Stock on Barchart",
+            "rendered_metric_identity": "IV Rank 16.75% defined as 'The current IV compared to the highest and lowest values over the past 1-year'",
+            "candidate_result": "advisory_proxy",
+            "evidence": "Barchart shows IV Rank=16.75% for GME using a 1-year lookback. Our IV Rank uses the same formula but is based on self-computed IV30 (which may differ from Barchart's IV baseline). During the initial accumulation period (<252 days), our lookback is shorter. Directional validation only."
+          }
         }
       ],
       "exhaustion_log": [

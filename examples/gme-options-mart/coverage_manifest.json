@@ -1,0 +1,73 @@
+{
+  "planned_count": 9,
+  "verified_count": 0,
+  "coverage_pct": 0.0,
+  "generated_at": "2026-05-27T12:00:00Z",
+  "checkpoint": 1,
+  "notes": "All metrics are unverified at BRD/TDD checkpoint. Verification deferred to Checkpoint 5/6 (DQC execution).",
+  "metrics": [
+    {
+      "name": "spot_price",
+      "source_type": "native",
+      "link_status": "exact",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "oi_by_strike",
+      "source_type": "native",
+      "link_status": "exact",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "iv_per_strike",
+      "source_type": "native",
+      "link_status": "exact",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "iv30",
+      "source_type": "derived",
+      "link_status": "proxy",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "hv20",
+      "source_type": "derived",
+      "link_status": "proxy",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "max_pain",
+      "source_type": "derived",
+      "link_status": "proxy",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "pc_ratio",
+      "source_type": "derived",
+      "link_status": "exact",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "net_gex",
+      "source_type": "derived",
+      "link_status": "proxy",
+      "status": "unverified",
+      "last_verified_ts": null
+    },
+    {
+      "name": "iv_rank",
+      "source_type": "derived",
+      "link_status": "proxy",
+      "status": "unverified",
+      "last_verified_ts": null
+    }
+  ]
+}

@@ -1,2 +1,0 @@
-streamlit>=1.30
-duckdb>=0.10,<1.5.3

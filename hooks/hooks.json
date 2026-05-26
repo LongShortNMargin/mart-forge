@@ -1,9 +1,0 @@
-{
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "skill": "using-mart-forge",
-      "description": "Detect current lifecycle phase and route to appropriate skill"
-    }
-  ]
-}

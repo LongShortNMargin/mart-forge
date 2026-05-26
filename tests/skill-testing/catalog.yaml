@@ -1,0 +1,52 @@
+## Skill & Agent Testing Catalog
+## Registry of all testable skills and agent roles in mart-forge.
+## Run specs with: mart-forge test --skill <name> | --agent <name>
+
+skills:
+  - name: using-mart-forge
+    spec_path: skills/utility/using-mart-forge.spec.md
+    category: utility
+    last_test_date: null
+
+  - name: source-discovery
+    spec_path: skills/lifecycle/source-discovery.spec.md
+    category: lifecycle
+    last_test_date: null
+
+  - name: mart-brd
+    spec_path: skills/lifecycle/mart-brd.spec.md
+    category: lifecycle
+    last_test_date: null
+
+  - name: mart-tdd
+    spec_path: skills/lifecycle/mart-tdd.spec.md
+    category: lifecycle
+    last_test_date: null
+
+  - name: mart-bootstrap
+    spec_path: skills/lifecycle/mart-bootstrap.spec.md
+    category: lifecycle
+    last_test_date: null
+
+  - name: mart-dqc
+    spec_path: skills/quality/mart-dqc.spec.md
+    category: quality
+    last_test_date: null
+
+  - name: mart-review
+    spec_path: skills/quality/mart-review.spec.md
+    category: quality
+    last_test_date: null
+
+agents:
+  - name: orchestrator
+    spec_path: agents/orchestrator.md
+    last_test_date: null
+
+  - name: reviewer
+    spec_path: agents/reviewer.md
+    last_test_date: null
+
+  - name: implementer
+    spec_path: agents/implementer.md
+    last_test_date: null

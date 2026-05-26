@@ -1,0 +1,128 @@
+name: Daily Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: "Run dbt with --full-refresh flag"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  schedule:
+    # TODO: Set your desired cron schedule
+    # Example: daily at 06:00 UTC
+    - cron: "0 6 * * *"
+
+env:
+  DBT_PROFILES_DIR: .
+  DUCKDB_PATH: ./mart.duckdb
+  # TODO: Add any provider-specific env vars
+  # PROVIDER_API_KEY: ${{ secrets.PROVIDER_API_KEY }}
+
+jobs:
+  dbt-pipeline:
+    name: dbt Seed, Run, Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install dbt-core dbt-duckdb
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: dbt seed
+        run: dbt seed --full-refresh
+
+      - name: dbt run
+        run: |
+          if [ "${{ github.event.inputs.full_refresh }}" = "true" ]; then
+            dbt run --full-refresh
+          else
+            dbt run
+          fi
+
+      - name: dbt test
+        run: dbt test
+
+  dqc-update:
+    name: DQC Update
+    runs-on: ubuntu-latest
+    needs: dbt-pipeline
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install dbt-core dbt-duckdb
+
+      - name: Run DQC checks
+        run: |
+          # TODO: Replace with your DQC check script or dbt test suite
+          echo "Running DQC threshold checks..."
+          dbt test --select tag:dqc
+
+      - name: Upload DQC results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dqc-results
+          path: target/run_results.json
+
+  confidentiality-scan:
+    name: Confidentiality Scan
+    runs-on: ubuntu-latest
+    needs: dbt-pipeline
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan for confidential data patterns
+        run: |
+          echo "Scanning for confidential data patterns..."
+          # Check for common PII patterns in SQL files
+          VIOLATIONS=0
+
+          # Scan for hardcoded secrets or tokens
+          if grep -rn --include="*.sql" --include="*.py" --include="*.yml" \
+            -E "(password|secret|token|api_key)\s*[:=]\s*['\"][^'\"]+['\"]" \
+            models/ seeds/ 2>/dev/null; then
+            echo "WARNING: Potential hardcoded secrets found"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Scan for email patterns in data files
+          if grep -rn --include="*.csv" --include="*.json" \
+            -E "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}" \
+            seeds/ data/ 2>/dev/null; then
+            echo "WARNING: Email addresses found in data files"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::warning::Confidentiality scan found $VIOLATIONS potential issue(s)"
+          else
+            echo "Confidentiality scan passed - no issues found"
+          fi

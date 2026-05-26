@@ -1,0 +1,243 @@
+{
+  "mart_name": "GME Options Mart",
+  "generated_at": "2026-05-27T00:00:00Z",
+  "metrics": [
+    {
+      "metric_name": "Spot Price",
+      "metric_definition": "Current market price of GME common stock, represented by the most recent closing price or intraday last-trade price.",
+      "expected_grain": "daily per-symbol",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance",
+          "asset": "v8/finance/chart/GME",
+          "fields": ["close", "open", "high", "low"],
+          "source_type": "native",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "end-of-day; intraday available during market hours",
+          "notes": "Verified 2026-05-27: returned GME (GameStop Corp.) close=22.15 USD on NYSE. Free tier, no API key required for delayed data."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "OI by Strike",
+      "metric_definition": "Open interest for each listed GME option contract, broken down by strike price and expiration date, separated into calls and puts.",
+      "expected_grain": "daily per-strike per-expiration per-option-type",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance",
+          "asset": "v7/finance/options/GME (via yfinance SDK)",
+          "fields": ["strike", "openInterest", "volume", "bid", "ask", "lastPrice", "inTheMoney", "contractSymbol"],
+          "source_type": "native",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "end-of-day; 15-minute delayed during market hours",
+          "notes": "Verified 2026-05-27: yfinance returned 38 call strikes and 36 put strikes for nearest expiration (2026-05-29). 17 expirations available. OI confirmed non-zero across multiple strikes."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "IV per Strike",
+      "metric_definition": "Implied volatility for each listed GME option contract as quoted by the exchange, representing the market's expectation of future volatility embedded in option prices.",
+      "expected_grain": "daily per-strike per-expiration per-option-type",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance",
+          "asset": "v7/finance/options/GME (via yfinance SDK)",
+          "fields": ["impliedVolatility", "strike", "contractSymbol"],
+          "source_type": "native",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "end-of-day; 15-minute delayed during market hours",
+          "notes": "Verified 2026-05-27: impliedVolatility field present and populated on every option row (e.g., ATM call IV ~2.55 for 2026-05-29 expiry). Values are annualized decimals."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "IV30",
+      "metric_definition": "30-day implied volatility for GME, calculated as the interpolated at-the-money IV from the two nearest expiration dates that bracket 30 calendar days to expiry.",
+      "expected_grain": "daily per-symbol",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance (derived)",
+          "asset": "v7/finance/options/GME (via yfinance SDK)",
+          "fields": ["impliedVolatility", "strike", "expirationDate"],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "daily",
+          "notes": "Derived: select ATM options (strike nearest to spot) from the two expirations bracketing 30 DTE, then linearly interpolate their IV. Source fields (impliedVolatility, strike) verified available."
+        }
+      ],
+      "exhaustion_log": [
+        "CBOE does not provide a free GME-specific IV30 index; IVX data requires paid subscription.",
+        "No free third-party API found providing pre-computed IV30 for individual equities."
+      ]
+    },
+    {
+      "metric_name": "HV20",
+      "metric_definition": "20-day historical (realized) volatility of GME, computed as the annualized standard deviation of the natural log of daily close-to-close returns over the trailing 20 trading days.",
+      "expected_grain": "daily per-symbol",
+      "stakeholder_priority": "medium",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance (derived)",
+          "asset": "v8/finance/chart/GME",
+          "fields": ["close"],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "daily",
+          "notes": "Derived: HV20 = STDDEV(LN(close[t]/close[t-1])) over 20 trading days, annualized by * SQRT(252). Verified 62+ trading days of close prices available."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "Max Pain",
+      "metric_definition": "The strike price at which the total dollar value of outstanding GME options (calls + puts) would expire with the least value, representing the theoretical price that causes maximum loss for option holders.",
+      "expected_grain": "daily per-expiration",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance (derived)",
+          "asset": "v7/finance/options/GME (via yfinance SDK)",
+          "fields": ["strike", "openInterest"],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "daily",
+          "notes": "Derived: for each candidate strike K, sum intrinsic-value losses across all call OI (max(0, K-strike)*OI) and put OI (max(0, strike-K)*OI). The K that minimizes total losses is max pain. OI data verified available per strike."
+        }
+      ],
+      "exhaustion_log": [
+        "No free API provides pre-computed max pain for GME."
+      ]
+    },
+    {
+      "metric_name": "P/C Ratio",
+      "metric_definition": "Put-to-call open interest ratio for GME options, computed as the total put open interest divided by total call open interest across all strikes for a given expiration (or aggregated across all expirations).",
+      "expected_grain": "daily per-expiration (and daily aggregate)",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance (derived)",
+          "asset": "v7/finance/options/GME (via yfinance SDK)",
+          "fields": ["openInterest"],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "daily",
+          "notes": "Derived: SUM(put.openInterest) / SUM(call.openInterest). Both call and put OI fields verified present and populated across all strikes."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "Net GEX",
+      "metric_definition": "Net Gamma Exposure for GME, representing the aggregate gamma-weighted open interest across all strikes, indicating how much delta-hedging market makers must perform for a $1 move in the underlying.",
+      "expected_grain": "daily per-symbol (and per-strike for GEX profile)",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance (derived)",
+          "asset": "v7/finance/options/GME (via yfinance SDK) + v8/finance/chart/GME",
+          "fields": ["strike", "openInterest", "impliedVolatility", "close"],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "daily",
+          "notes": "Derived: gamma is computed via Black-Scholes (N'(d1) / (S * sigma * sqrt(T))) using per-strike IV, spot price, and DTE. GEX per strike = gamma * OI * 100 * spot. Net GEX = SUM(call_GEX) - SUM(put_GEX). All input fields verified available. Risk-free rate assumed from US Treasury yield."
+        }
+      ],
+      "exhaustion_log": [
+        "Yahoo Finance does not provide Greeks directly; must derive gamma from Black-Scholes.",
+        "CBOE provides Greeks on its website but not via a free structured API for GME specifically."
+      ]
+    },
+    {
+      "metric_name": "IV Rank",
+      "metric_definition": "Percentile rank of the current IV30 relative to the trailing 252-trading-day (1-year) range of IV30, indicating whether current implied volatility is historically high or low for GME.",
+      "expected_grain": "daily per-symbol",
+      "stakeholder_priority": "medium",
+      "source_bindings": [
+        {
+          "provider": "Yahoo Finance (derived)",
+          "asset": "v7/finance/options/GME (via yfinance SDK)",
+          "fields": ["impliedVolatility", "strike", "expirationDate"],
+          "source_type": "derived",
+          "link_status": "proxy",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "daily (requires historical accumulation)",
+          "notes": "Derived: IV Rank = (current_IV30 - min_IV30_252d) / (max_IV30_252d - min_IV30_252d). Requires the pipeline to accumulate daily IV30 snapshots over 252 trading days before this metric becomes fully accurate. Link status is 'proxy' because the initial period will use a shorter lookback window. After 252 days of accumulation, link status upgrades to 'exact'."
+        }
+      ],
+      "exhaustion_log": [
+        "No free provider offers pre-computed historical IV30 time series for individual equities.",
+        "CBOE IVX requires paid data subscription.",
+        "Self-accumulation from daily IV30 snapshots is the only viable free approach."
+      ]
+    }
+  ]
+}

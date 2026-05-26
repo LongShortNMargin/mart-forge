@@ -1,24 +1,29 @@
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 *.egg-info/
 dist/
 build/
-.eggs/
-*.egg
 .venv/
-venv/
-.env
-.env.local
+
+# dbt
 target/
-logs/
 dbt_packages/
+logs/
 *.duckdb
 *.duckdb.wal
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
-*.swp
-*.swo
-.pytest_cache/
-.ruff_cache/
-.coverage
-htmlcov/
+Thumbs.db
+
+# Test results
+tests/skill-testing/results/

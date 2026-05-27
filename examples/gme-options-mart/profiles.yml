@@ -1,8 +1,0 @@
-gme_options_mart:
-  target: dev
-  outputs:
-    dev:
-      type: duckdb
-      path: target/gme_options.duckdb
-      schema: main
-      threads: 1

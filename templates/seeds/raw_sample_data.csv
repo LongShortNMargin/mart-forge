@@ -1,0 +1,11 @@
+event_date,entity_id,event_type,measure_1,measure_2,provider,pull_ts_utc,run_id
+2026-01-15,E-001,sample,10.5,1,sample_provider,2026-01-15T08:30:00Z,run_20260115_0830
+2026-01-15,E-002,sample,12.3,2,sample_provider,2026-01-15T08:30:00Z,run_20260115_0830
+2026-01-15,E-003,sample,9.8,1,sample_provider,2026-01-15T08:30:00Z,run_20260115_0830
+2026-01-16,E-001,sample,11.0,1,sample_provider,2026-01-16T08:30:00Z,run_20260116_0830
+2026-01-16,E-002,sample,12.7,3,sample_provider,2026-01-16T08:30:00Z,run_20260116_0830
+2026-01-16,E-003,sample,10.1,2,sample_provider,2026-01-16T08:30:00Z,run_20260116_0830
+2026-01-17,E-001,sample,11.5,2,sample_provider,2026-01-17T08:30:00Z,run_20260117_0830
+2026-01-17,E-002,sample,13.0,1,sample_provider,2026-01-17T08:30:00Z,run_20260117_0830
+2026-01-17,E-003,sample,9.5,1,sample_provider,2026-01-17T08:30:00Z,run_20260117_0830
+2026-01-18,E-001,sample,12.0,3,sample_provider,2026-01-18T08:30:00Z,run_20260118_0830

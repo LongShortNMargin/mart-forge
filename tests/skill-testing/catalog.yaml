@@ -1,0 +1,135 @@
+# Skill Testing Framework — Catalog
+# Registry of every skill in mart-forge with coverage tracking.
+# Pattern adapted from CCGS Skill Testing Framework (open-source).
+
+version: 2
+last_updated: "2026-05-28"
+
+skills:
+  # --- methodology skills ----------------------------------------------
+  - name: source-discovery
+    spec: specs/source-discovery.spec.md
+    category: lifecycle
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: mart-brd
+    spec: specs/mart-brd.spec.md
+    category: lifecycle
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: mart-tdd
+    spec: specs/mart-tdd.spec.md
+    category: lifecycle
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: mart-bootstrap
+    spec: specs/mart-bootstrap.spec.md
+    category: lifecycle
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: mart-dqc
+    spec: specs/mart-dqc.spec.md
+    category: quality
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: mart-review
+    spec: specs/mart-review.spec.md
+    category: review
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: schema-evolve
+    spec: specs/schema-evolve.spec.md
+    category: maintenance
+    priority: medium
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: using-mart-forge
+    spec: specs/using-mart-forge.spec.md
+    category: router
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  # --- lifecycle skills (Symphony pattern) ------------------------------
+  - name: commit
+    spec: specs/commit.spec.md
+    category: utility
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: debug
+    spec: specs/debug.spec.md
+    category: utility
+    priority: medium
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: land
+    spec: specs/land.spec.md
+    category: utility
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: pull
+    spec: specs/pull.spec.md
+    category: utility
+    priority: medium
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: push
+    spec: specs/push.spec.md
+    category: utility
+    priority: medium
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: linear
+    spec: specs/linear.spec.md
+    category: utility
+    priority: medium
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""

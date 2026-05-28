@@ -1,0 +1,154 @@
+# dbt-core reference for mart-forge agents
+
+A condensed reference an agent can read once instead of fetching docs
+mid-session. For full docs see https://docs.getdbt.com.
+
+## Project layout
+
+```
+my_project/
+├── dbt_project.yml          # project config
+├── profiles.yml             # connection profile (NOT committed if secrets)
+├── packages.yml             # external packages
+├── models/
+│   ├── ods/*.sql
+│   ├── dim/*.sql
+│   ├── dwd/*.sql
+│   ├── dws/*.sql
+│   └── ads/*.sql
+├── seeds/*.csv
+├── tests/*.sql              # singular tests
+├── macros/*.sql
+└── snapshots/*.sql
+```
+
+## Model config
+
+```sql
+{{ config(
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key=['pull_date','option_symbol'],
+    on_schema_change='fail'
+) }}
+
+select * from {{ source('cboe','options_chain') }}
+{% if is_incremental() %}
+where pull_date > (select max(pull_date) from {{ this }})
+{% endif %}
+```
+
+Materializations: `table`, `view`, `incremental`, `ephemeral`,
+`snapshot`.
+
+Incremental strategies (dbt-duckdb): `append`, `merge`, `delete+insert`.
+
+## Source declaration
+
+```yaml
+# models/ods/sources.yml
+version: 2
+sources:
+  - name: cboe
+    tables:
+      - name: options_chain
+        external:
+          location: "{{ env_var('DATA_PATH') }}/cboe_options_chain.parquet"
+```
+
+## Generic tests in schema.yml
+
+```yaml
+version: 2
+models:
+  - name: gme_dwd_option_contract_di
+    columns:
+      - name: option_symbol
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_option_series')
+              field: option_symbol
+      - name: pull_date
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['2026-01-01', '2026-01-02']  # rare; usually omitted
+      - name: gamma
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+```
+
+## Singular test (tests/*.sql)
+
+```sql
+-- A singular test passes if it returns zero rows.
+select option_symbol, count(*) as n
+from {{ ref('gme_ods_cboe_options_chain') }}
+group by option_symbol, pull_date
+having count(*) > 1
+```
+
+## Useful commands
+
+```
+dbt deps               # install packages
+dbt seed               # load seeds
+dbt run                # build models
+dbt run --select ods   # build a layer
+dbt run --select +gme_dwd_option_contract_di
+                       # build a model and all its upstream dependencies
+dbt test               # run generic + singular tests
+dbt build              # seed + run + test in dependency order
+dbt compile            # compile only
+dbt debug              # validate profiles.yml and connectivity
+dbt docs generate      # generate the static documentation site
+```
+
+## Outputs CI needs
+
+After `dbt build` or `dbt test`:
+
+- `target/run_results.json` — per-node status used by
+  `scripts/dqc_update.py` (or equivalent) to populate `dqc_scorecard.json`.
+- `target/manifest.json` — node graph and metadata.
+
+## Jinja patterns
+
+```sql
+{{ ref('model_name') }}                    -- reference another model
+{{ source('source_name','table_name') }}  -- reference a source
+{{ this }}                                 -- this model (for incremental)
+{% if is_incremental() %}...{% endif %}    -- incremental guard
+{{ var('pull_date') }}                     -- read a CLI variable
+{{ env_var('VAR_NAME') }}                  -- read an env var
+```
+
+## Naming conventions for tests
+
+Generic tests are auto-named by dbt as:
+`<test_type>_<model>_<column>` (e.g., `unique_gme_dwd_option_contract_di_option_symbol`).
+
+This matches the regex used by `dqc_scorecard.json` to link tests to
+DQC control rows. Custom singular tests SHOULD follow the same shape:
+`<control_id>_<table>.sql`.
+
+## Common pitfalls
+
+- **Forgetting `unique_key` on incremental.** Without it, `delete+insert`
+  cannot detect dupes; row counts double per run.
+- **Putting business logic in ODS.** ODS is pass-through. Logic belongs
+  in DWD (cleaning, joins) and DWS (aggregation).
+- **Referring to upstream `dim_*` from inside an ODS.** ODS layer
+  cannot reference DIM (would be circular). Use the DWD layer to join
+  facts to dimensions.
+
+## dbt-duckdb specifics
+
+- Set `path: '<absolute path to .duckdb file>'` in profiles.yml.
+- `pre-hook` to install duckdb extensions: `INSTALL httpfs; LOAD httpfs;`.
+- MotherDuck: set `path: 'md:<database>?motherduck_token=$MOTHERDUCK_TOKEN'`
+  in profiles.yml; never commit the token.

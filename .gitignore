@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+warehouse.duckdb
+
+# Secrets and local env
+.env
+.env.local
+profiles.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Generated artifacts (regeneratable from spec + signed contracts)
+docs/generated/*
+!docs/generated/.gitkeep
+
+# Local checkout artifacts
+.coverage

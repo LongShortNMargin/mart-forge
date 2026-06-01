@@ -1,0 +1,138 @@
+# Streamlit reference for mart-forge agents
+
+A condensed reference an agent can read once instead of fetching docs
+mid-session. For full docs see https://docs.streamlit.io.
+
+## Minimal app
+
+```python
+import streamlit as st
+
+st.set_page_config(page_title="my mart", layout="wide")
+st.title("My Mart Dashboard")
+st.write("Hello from Streamlit.")
+```
+
+Run it:
+```
+streamlit run app.py --server.port 8503
+```
+
+## Sidebar inputs
+
+```python
+with st.sidebar:
+    selected_date = st.date_input("Pull date", value=None)
+    layer = st.selectbox("Layer", ["DWS", "ADS"])
+    refresh = st.button("Refresh")
+```
+
+## Layout
+
+```python
+col1, col2, col3 = st.columns([1, 2, 1])
+col1.metric("Volume", "1,234")
+col2.metric("Avg Price", "$45.67", "+2.3%")
+col3.metric("Trades", "98")
+
+tab1, tab2, tab3 = st.tabs(["GEX", "OI", "IV"])
+with tab1:
+    st.plotly_chart(fig_gex, use_container_width=True)
+with tab2:
+    st.dataframe(df_oi)
+```
+
+## Data loading and caching
+
+```python
+import duckdb
+import pandas as pd
+
+@st.cache_resource
+def get_conn():
+    return duckdb.connect("warehouse.duckdb")
+
+@st.cache_data(ttl=600)
+def load_metrics(date: str) -> pd.DataFrame:
+    return get_conn().execute(
+        "SELECT * FROM gme_ads_market_dashboard WHERE pull_date = ?",
+        [date]
+    ).df()
+```
+
+`@st.cache_resource` caches a connection across reruns.
+`@st.cache_data` caches DataFrames; use a TTL so freshness matters.
+
+## Plotly charts
+
+```python
+import plotly.express as px
+
+fig = px.bar(df, x="strike", y="gex", color="series_type")
+fig.update_layout(title="Gamma Exposure by Strike")
+st.plotly_chart(fig, use_container_width=True)
+```
+
+## Status badges (used for link-status display)
+
+```python
+STATUS_BADGE = {
+    "verified":     "✅",
+    "proxy":        "⚠️ proxy",
+    "stale":        "⏳ stale",
+    "unsupported":  "🚫 unsupported",
+    "pending":      "⏱ pending",
+}
+
+def metric_with_badge(label: str, value: str, status: str):
+    badge = STATUS_BADGE.get(status, "?")
+    st.metric(label=f"{label} {badge}", value=value)
+```
+
+Per `G-HONEST-LABEL` (SPEC §9), every dashboard metric MUST render the
+badge. Removing the badge call is a CI failure.
+
+## Fixture vs live mode
+
+```python
+import os
+
+IS_FIXTURE = os.environ.get("MART_MODE", "fixture") == "fixture"
+
+if IS_FIXTURE:
+    st.warning("FIXTURE / DEMO MODE — values from static parquet")
+else:
+    st.success("LIVE MODE — values from warehouse")
+```
+
+The banner is non-optional. The branch is required.
+
+## Coverage badge
+
+```python
+def coverage_badge(verified: int, planned: int):
+    return f"Data Loaded {verified}/{planned} | DQC Verified {verified}/{planned}"
+
+st.caption(coverage_badge(coverage["verified_count"], coverage["planned_count"]))
+```
+
+## Health check endpoint
+
+Streamlit exposes `/_stcore/health` returning `ok` when the app is
+running. CI uses this for the dashboard smoke test:
+
+```bash
+curl -fsS http://localhost:8503/_stcore/health
+```
+
+## Common pitfalls
+
+- **Reruns on every input.** Streamlit re-runs the whole script on
+  every widget interaction. Wrap expensive work in `@st.cache_data`
+  or `@st.cache_resource`.
+- **Hard-coded data paths.** Use an env var for the warehouse path so
+  CI and local share the same code.
+- **No global state across users.** Streamlit runs per-session;
+  shared state needs an external store (Redis, DB).
+- **Connection per session.** Avoid creating one DuckDB connection
+  per widget interaction — cache it.

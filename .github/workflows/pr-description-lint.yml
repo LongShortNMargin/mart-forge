@@ -1,0 +1,28 @@
+name: pr-description-lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR description contains acceptance criteria
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -e
+          if [ -z "$PR_BODY" ]; then
+            echo "::error::PR body is empty. Add a description with an 'Acceptance criteria' checklist."
+            exit 1
+          fi
+          if ! printf '%s' "$PR_BODY" | grep -q -i "^## Acceptance criteria"; then
+            echo "::error::PR body missing '## Acceptance criteria' section."
+            exit 1
+          fi
+          if ! printf '%s' "$PR_BODY" | grep -q "^- \[ \]\\|^- \[x\]"; then
+            echo "::error::PR body must include at least one checkbox under acceptance criteria."
+            exit 1
+          fi
+          echo "PR description lint passed."

@@ -1,0 +1,149 @@
+# DuckDB reference for mart-forge agents
+
+A condensed reference an agent can read once instead of fetching docs
+mid-session. For full docs see https://duckdb.org/docs.
+
+## Connect
+
+```python
+import duckdb
+con = duckdb.connect("warehouse.duckdb")       # file-based
+con = duckdb.connect(":memory:")                # in-memory
+# MotherDuck (hosted):
+con = duckdb.connect("md:my_db?motherduck_token=" + os.environ["MOTHERDUCK_TOKEN"])
+```
+
+## Read external files directly
+
+```sql
+-- read parquet
+SELECT * FROM 'data/options_chain.parquet';
+SELECT * FROM read_parquet('data/*.parquet', filename=TRUE);
+
+-- read CSV
+SELECT * FROM 'data/raw.csv';
+SELECT * FROM read_csv('data/raw.csv', header=true, sample_size=10000);
+
+-- read JSON
+SELECT * FROM 'data/log.json';
+
+-- read S3 (requires httpfs extension)
+INSTALL httpfs; LOAD httpfs;
+SELECT * FROM 's3://bucket/prefix/*.parquet';
+
+-- read across multiple files
+SELECT * FROM read_parquet([
+  'data/2026-01.parquet',
+  'data/2026-02.parquet'
+]);
+```
+
+## Window functions (used heavily in DWS)
+
+```sql
+SELECT
+  pull_date,
+  symbol,
+  close,
+  AVG(close) OVER (
+    PARTITION BY symbol
+    ORDER BY pull_date
+    ROWS BETWEEN 19 PRECEDING AND CURRENT ROW
+  ) AS sma_20,
+  LAG(close, 1) OVER (PARTITION BY symbol ORDER BY pull_date) AS close_lag_1,
+  ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY pull_date DESC) AS rn
+FROM gme_dwd_daily_quote_di
+```
+
+## Common aggregations
+
+```sql
+SELECT
+  pull_date,
+  symbol,
+  SUM(volume)                 AS total_volume,
+  AVG(price)                  AS avg_price,
+  COUNT(DISTINCT user_id)     AS unique_users,
+  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) AS median_price,
+  ARRAY_AGG(option_symbol)    AS contracts,
+  STDDEV_SAMP(return)         AS volatility
+FROM dws_fact
+GROUP BY pull_date, symbol
+```
+
+## Pivot and unpivot
+
+```sql
+-- pivot
+PIVOT t ON metric_name USING SUM(metric_value) GROUP BY pull_date;
+
+-- unpivot
+UNPIVOT t ON sma_20, ema_20, rsi_14 INTO NAME metric VALUE val;
+```
+
+## Useful built-ins
+
+```sql
+-- date arithmetic
+DATE '2026-01-15' + INTERVAL 1 DAY
+DATE_TRUNC('week', pull_date)
+EXTRACT(YEAR FROM pull_date)
+STRFTIME(pull_date, '%Y-%m-%d')
+STRPTIME('2026-01-15', '%Y-%m-%d')
+
+-- string
+LIST_ELEMENT(SPLIT(s, ','), 1)
+REGEXP_EXTRACT(s, '\\d+')
+
+-- null handling
+COALESCE(a, b, c)
+NULLIF(a, b)
+
+-- types
+CAST(x AS DOUBLE)
+TRY_CAST(s AS INTEGER)    -- returns NULL on failure
+```
+
+## EXPORT and IMPORT
+
+```sql
+-- snapshot the warehouse to parquet files
+EXPORT DATABASE 'snapshot/' (FORMAT PARQUET);
+IMPORT DATABASE 'snapshot/';
+
+-- copy a single table
+COPY gme_dwd_option_contract_di TO 'export.parquet' (FORMAT PARQUET);
+COPY gme_dwd_option_contract_di FROM 'export.parquet';
+```
+
+## Extensions used by mart-forge
+
+| Extension | Purpose |
+|-----------|---------|
+| `httpfs`  | Read/write S3, GCS, Azure Blob, HTTPS URLs |
+| `parquet` | Read/write parquet (bundled) |
+| `json`    | JSON parsing (bundled) |
+| `motherduck` | Connect to MotherDuck-hosted databases |
+
+Install once per database file:
+```sql
+INSTALL httpfs; LOAD httpfs;
+```
+
+## Performance tips
+
+- DuckDB is columnar and vectorized — wide aggregations are cheap.
+- Filter early. WHERE clauses push down through views and CTEs.
+- For repeated patterns, prefer parquet over CSV (10x+ faster).
+- `PRAGMA threads = N` to control parallelism.
+- `EXPLAIN ANALYZE <query>` shows row counts at each node.
+
+## Common pitfalls
+
+- **In-memory DBs lose state.** A `:memory:` connection vanishes when
+  the process exits. For warehouse workloads use a file path.
+- **Implicit casts.** DuckDB is stricter than SQLite. `'1' + 1`
+  fails; use `CAST('1' AS INTEGER) + 1`.
+- **Boolean fields.** DuckDB stores booleans as `true`/`false`, not
+  `1`/`0`. Test against the literal.
+- **Floating-point math.** Use `DECIMAL(p, s)` for currency.

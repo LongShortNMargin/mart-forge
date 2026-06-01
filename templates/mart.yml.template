@@ -1,0 +1,35 @@
+# mart.yml — the manifest for a mart-forge project.
+# Copy this file to <project-root>/mart.yml and fill in the values below.
+
+mart_name: <kebab-case-name>     # e.g., orders-mart
+prefix: <three-or-four-letter>    # e.g., ord -- used in model names
+
+# Phase tracking — updated by skills as they run.
+phase: not_started                # not_started | A0_complete | A_draft | A_signed | B_draft | B_signed | C_complete | D_complete
+
+# Artifact paths (relative to mart root).
+source_catalog_path: docs/source_catalog.json
+brd_path: docs/business-requirements.md
+tdd_path: docs/tech-design-doc.md
+
+# Sign-off flags.
+brd_signed: false
+tdd_signed: false
+
+# Optional: tracker bindings consumed by /linear.
+issue_tracker:
+  provider: github            # github | linear | multica
+  project: your-org/your-repo
+
+# Optional: dashboard mode toggle (fixture for CI, live for production).
+dashboard:
+  mode: fixture               # fixture | live
+  port: 8503
+
+# Optional: data refresh cadence.
+refresh:
+  schedule: "0 6 * * *"       # cron, in UTC
+  sla_hours: 2
+
+# Last run timestamp -- updated by skills.
+last_run: null

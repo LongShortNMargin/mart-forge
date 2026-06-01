@@ -110,6 +110,16 @@ invocation, and to delete or block any other shape.
 (`test_validate_dogfood.py::test_rejects_reconstructed_entry`) exists
 specifically to defeat the prior bypass.
 
+With `--check-semantics` the validator also runs a **coherence check**:
+the `skill_name` must exist in the on-disk catalog, artifacts must
+resolve as paths or git refs, timestamps must parse and not be in the
+future, input and output artifacts must differ, and a SHA-typed
+`output_artifact` must touch the path named in `input_artifact`. This
+is a coherence gate, not invocation proof — an after-the-fact author
+can still pick two distinct existing files and pass the check. That
+residual gap is recorded under `TD-006` in
+`docs/tech-debt-tracker.md` and is the Phase-G runtime concern.
+
 ## 8. Confidentiality is part of correctness
 
 The repository is public. Operator-private data, private file paths,

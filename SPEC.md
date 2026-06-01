@@ -708,7 +708,7 @@ by the adversarial reviewer or CI; the orchestrator records the verdict.
 | G-LINK | All candidate comparison links verified per §6.2 | BRD/TDD | Unverified metrics blocked at sign-off |
 | G-FIXTURE | Fixture data labeled with manifest; no fixture presented as live | Implementation | CI check + dashboard banner enforcement |
 | G-ODS | Every ODS table satisfies §7.4. Idempotence test green. | TDD + Implementation | Checkpoint 2 acceptance |
-| G-DOGFOOD | Conformance example built by invoking framework's own skills. Invocations recorded in `.skill-invocations.jsonl`. | Phase G (all checkpoints) | CI enforcement via `scripts/validate_dogfood.py` |
+| G-DOGFOOD | Conformance example built by invoking framework's own skills. Invocations recorded in `.skill-invocations.jsonl`. Coherence-checked by `scripts/validate_dogfood.py` (schema + skill catalog + artifact resolution + SHA-touch); runtime-written invocation proof is the deferred half tracked under TD-006. | Phase G (all checkpoints) | CI enforcement via `scripts/validate_dogfood.py --check-semantics` |
 | G-HONEST-LABEL | No metric on dashboard shows a value without its status badge. | Dashboard | CI check + rendering validation |
 | G-ITERATIVE | Each Phase F iteration measurably raises coverage or resolves a labelled defect | Phase F loop | Orchestrator enforcement |
 | G-CI | GitHub Actions green on `main` after each checkpoint merge | All checkpoints | Branch protection |

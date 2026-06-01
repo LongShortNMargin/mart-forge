@@ -175,7 +175,20 @@ def sync(
                 shutil.rmtree(link)
             else:
                 link.unlink()
-        os.symlink(link_target, link)
+        try:
+            os.symlink(link_target, link)
+        except FileExistsError:
+            # Defensive: if a non-symlink slot survives the cleanup
+            # above (e.g. a Windows clone where symlink-removal failed
+            # silently, or a race with a parallel writer), surface the
+            # same hint as the explicit REFUSING branch rather than
+            # leaking a bare OSError trace.
+            print(
+                f"REFUSING to overwrite non-symlink slot at {link} — "
+                f"pass --force to remove and replace, or move the "
+                f"existing entry aside. Skipping symlink for {name}.",
+                file=sys.stderr,
+            )
 
     print(f"Synced {len(skills)} skill symlinks under {target_dir}.")
     return 0

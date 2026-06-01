@@ -82,3 +82,33 @@ intentionally per-install.
 exists so the gap is visible.
 
 **Owner.** Per-install operator.
+
+## TD-006 — `validate_dogfood` is a coherence gate, not invocation proof
+
+**Summary.** `scripts/validate_dogfood.py --check-semantics` verifies
+that `.skill-invocations.jsonl` entries are structurally well-formed:
+the `skill_name` exists in the on-disk catalog, the artifact paths or
+refs resolve, the timestamp parses and is not in the future, input and
+output artifacts are distinct, and when `output_artifact` is a git SHA
+the commit must touch `input_artifact`. The gate does NOT prove the
+named skill actually ran — an operator can pick two distinct existing
+repo paths (or a historical SHA that touched the named input) and the
+entry will pass.
+
+**Why.** Real invocation proof requires the agent runtime to write the
+log itself, contemporaneous with the call. After-the-fact entries
+authored by any actor can only ever be checked for coherence. The
+round-3 reviewer (EMB-322, 2026-06-01) reproduced the path-vs-path
+shape (`{input: README.md, output: SPEC.md, skill: mart-brd}` passes)
+and the historical-SHA shape (`{output: <real SHA touching README>}`
+passes regardless of `skill_name`). The orchestrator's ruling accepted
+the gate as coherence-only and tracked the residual gap here.
+
+**Trigger to fix.** Phase G — the conformance-mart dispatch wires a
+Claude Code runtime that emits skill invocations directly to the log
+file at the moment the skill runs. At that point the validator can
+add an "entry was written by the runtime within N seconds of its
+recorded timestamp" check, or pivot the schema to require a
+runtime-supplied `run_id` that has no off-line bypass.
+
+**Owner.** Framework maintainers / Phase-G dispatcher.

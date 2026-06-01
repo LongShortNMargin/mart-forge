@@ -41,7 +41,7 @@ A defect that escapes one layer is caught by the next.
 | `lint_brd.py` | Missing B-1..B-4, missing per-metric fields, bogus `link_status`, B-3 metric without source binding |
 | `lint_tdd.py` | Missing T-1..T-21, T-8 row missing any of the 6 fields, prose in `calculation` for derived columns, T-9 ODS contract missing a required field |
 | `lint_layer_direction.py` | `ref()` upward (DWD -> ADS, DWS -> DIM, etc.). Maintains the strict ODS->DIM->DWD->DWS->ADS direction. |
-| `validate_dogfood.py` | Any entry containing `"reconstructed": true`. Invalid JSONL line. Missing required field. |
+| `validate_dogfood.py` | Any entry containing `"reconstructed": true`. Invalid JSONL line. Missing required field. **Coherence check** (with `--check-semantics`): unknown skill, unresolvable artifact, future timestamp, identical input/output, SHA that does not touch its named input. **Not** invocation proof — see TD-006. |
 | `confidentiality_scan.py` | Any banned string anywhere in tracked files. |
 | `lint_docs_freshness.py` | Dangling cross-references; references to deleted files; stale spec filenames. |
 

@@ -13,7 +13,7 @@ AltimateAI pack does not cover today.
 
 ## Install (Claude Code)
 
-```text
+```bash
 /plugin marketplace add LongShortNMargin/mart-forge
 /plugin install mart-forge-lifecycle@mart-forge
 /plugin install mart-forge-workflow@mart-forge

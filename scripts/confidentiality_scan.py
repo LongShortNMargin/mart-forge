@@ -15,11 +15,12 @@ Each violation prints:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Iterable, List, NamedTuple, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Set, Tuple
 
 SCAN_EXTENSIONS = {
     ".py", ".md", ".yml", ".yaml", ".json", ".sql", ".csv", ".txt",
@@ -37,24 +38,65 @@ EXCLUDED_PATHS = {
 }
 
 
-# Per-category allow-list for the public GitHub org slug. The slug is
+# Per-context allow-list for the public GitHub org slug. The slug is
 # permitted in three narrow public-discovery surfaces and rejected
-# everywhere else. The orchestrator clarification (EMB-322, 2026-06-01)
-# unblocks B2 by carving these surfaces out — without them the plugin
-# install URL and clone URL in the README would be uninstallable.
+# everywhere else. The orchestrator's round-3 ruling (EMB-322,
+# 2026-06-01) requires NARROW context predicates, not file-wide
+# allowance — without them the README is one prose edit away from
+# leaking the slug onto a contributor line, badge, or quoted excerpt.
 #
-# A match in a non-allow-listed file still trips the scanner. A match
-# inside one of these files is permitted ONLY when the surrounding
-# context predicate (also defined below) holds. See `_is_allowed_match`.
+# The allowed contexts are:
+#
+#   - ``.claude-plugin/marketplace.json`` — the line must be the
+#     ``"name": "LongShortNMargin"`` entry inside the top-level
+#     ``"owner": { ... }`` object. Other JSON contexts in the same
+#     file are not allowed.
+#   - ``README.md`` — the line must be inside a fenced code block
+#     whose info string starts with ``bash``, ``shell``, or
+#     ``console``, AND must contain ``/plugin marketplace add `` or
+#     ``git clone https://github.com/``. Prose lines, info strings
+#     of other shapes (``text``, ``python`` ...), and code lines
+#     without an install command are all rejected.
+#   - ``MARKETPLACE.md`` — the line must be inside a section whose
+#     H2 heading is ``## Submission steps``, ``## How to submit``, or
+#     ``## Submitting to the marketplace`` (case-insensitive). The
+#     file is otherwise treated like any other doc.
+#
+# See ``_public_org_allowed_lines`` and its three per-file helpers
+# for the implementation. ``_is_public_org_allowed_at`` is what
+# ``scan_file`` calls per match.
 PUBLIC_ORG_SLUG_RE = re.compile(r"longshortnmargin", re.IGNORECASE)
 
-# Relative POSIX paths where the public org slug is allowed. Order is
-# significant only for readability — every entry is an exact match.
-PUBLIC_ORG_ALLOWED_PATHS = {
+# Files for which a context predicate is defined. Anything not in this
+# map is treated as "slug is banned, period".
+PUBLIC_ORG_PREDICATE_PATHS = {
     ".claude-plugin/marketplace.json",
     "README.md",
     "MARKETPLACE.md",
 }
+
+# Allowed H2 headings for MARKETPLACE.md (compared case-insensitively).
+# The file is generated and the heading may stabilize under different
+# wording; any of these is acceptable as the submission section.
+_MARKETPLACE_MD_ALLOWED_SECTIONS = {
+    "submission steps",
+    "how to submit",
+    "submitting to the marketplace",
+}
+
+# Fenced-block info strings that count as a shell-like context for the
+# README install allowance. The match is case-insensitive and uses
+# ``startswith`` — ``console`` and ``bash`` are both common in plugin
+# READMEs; ``text`` and ``python`` are deliberately excluded.
+_README_SHELL_FENCE_PREFIXES = ("bash", "shell", "console")
+
+# Tokens an install line must contain to qualify for the allowance.
+# ``in`` substring check, so ``/plugin marketplace add LongShortNMargin``
+# counts (no trailing space required after the value).
+_README_INSTALL_LINE_MARKERS = (
+    "/plugin marketplace add ",
+    "git clone https://github.com/",
+)
 
 # Dot-prefixed directory names allowed to be skipped during the walk.
 # Anything not on this allow-list — most importantly `.claude/`,
@@ -243,24 +285,162 @@ def is_scannable(path: Path) -> bool:
     return path.suffix.lower() in SCAN_EXTENSIONS
 
 
-def _is_public_org_allowed(rel_path: str, line: str) -> bool:
-    """Return True when a `longshortnmargin` match in this file+line is
-    permitted by the public-discovery allow-list.
+def _readme_allowed_lines(text: str) -> Set[int]:
+    """Return README.md line numbers (1-indexed) where the public-org
+    slug is permitted.
 
-    The orchestrator's spec clarification (EMB-322 comment, 2026-06-01)
-    permits the public org slug in three narrow surfaces:
+    A line is allowed iff:
 
-    - ``.claude-plugin/marketplace.json`` — the manifest ``owner.name``.
-    - ``README.md`` — install / clone commands.
-    - ``MARKETPLACE.md`` — submission instructions.
+    1. It is inside a fenced code block (``\\`\\`\\``` ... ``\\`\\`\\```` or
+       ``~~~`` ... ``~~~``) whose info string starts with ``bash``,
+       ``shell``, or ``console`` (case-insensitive).
+    2. It contains ``/plugin marketplace add `` or
+       ``git clone https://github.com/``.
 
-    Outside these files, the slug is banned. Inside these files, the
-    slug is allowed regardless of line content; the relative-path gate
-    is sufficient because the files themselves are public-install
-    surfaces and there is no other plausible reason for the slug to
-    appear in them.
+    The fence line itself is never allowed; only lines strictly between
+    the opening and closing fence count.
     """
-    return rel_path in PUBLIC_ORG_ALLOWED_PATHS
+    allowed: Set[int] = set()
+    in_fence = False
+    fence_marker: str = ""
+    info_is_shell = False
+    fence_open_re = re.compile(r"^(`{3,}|~{3,})\s*([A-Za-z0-9_+\-]*)")
+    for idx, line in enumerate(text.splitlines(), start=1):
+        stripped = line.lstrip()
+        m = fence_open_re.match(stripped)
+        if m:
+            marker = m.group(1)[:3]  # collapse "````+" to "```" / "~~~"
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+                info = (m.group(2) or "").lower()
+                info_is_shell = any(
+                    info.startswith(prefix)
+                    for prefix in _README_SHELL_FENCE_PREFIXES
+                )
+            elif stripped.startswith(fence_marker):
+                in_fence = False
+                fence_marker = ""
+                info_is_shell = False
+            # The fence line itself is never an install-command line.
+            continue
+        if in_fence and info_is_shell:
+            if any(marker in line for marker in _README_INSTALL_LINE_MARKERS):
+                allowed.add(idx)
+    return allowed
+
+
+def _marketplace_md_allowed_lines(text: str) -> Set[int]:
+    """Return MARKETPLACE.md line numbers where the public-org slug is
+    permitted.
+
+    A line is allowed iff it falls under an H2 heading whose text
+    (after the ``## `` prefix, trimmed and lowercased) is one of
+    ``_MARKETPLACE_MD_ALLOWED_SECTIONS``. The heading line itself is
+    not counted as an allowed line — the slug should never appear in
+    a heading.
+    """
+    allowed: Set[int] = set()
+    in_allowed_section = False
+    h2_re = re.compile(r"^##\s+(.+?)\s*$")
+    h_any_re = re.compile(r"^(#{1,6})\s+")
+    for idx, line in enumerate(text.splitlines(), start=1):
+        # An H2 heading both closes the previous section and opens the
+        # next one. An H1 also closes any current allowed section
+        # (everything beneath an H1 is a new top-level scope).
+        h_match = h_any_re.match(line)
+        if h_match:
+            level = len(h_match.group(1))
+            if level <= 2:
+                m = h2_re.match(line)
+                if m and m.group(1).strip().lower() in _MARKETPLACE_MD_ALLOWED_SECTIONS:
+                    in_allowed_section = True
+                else:
+                    in_allowed_section = False
+            # H3+ headings stay inside the current section.
+            continue
+        if in_allowed_section:
+            allowed.add(idx)
+    return allowed
+
+
+def _marketplace_json_allowed_lines(text: str) -> Set[int]:
+    """Return marketplace.json line numbers where the public-org slug is
+    permitted.
+
+    A line is allowed iff:
+
+    1. It matches the literal form
+       ``"name": "<slug>"`` (whitespace flexible, trailing comma OK), and
+    2. It appears at the immediate-child depth of the top-level
+       ``"owner": { ... }`` object.
+
+    The JSON is parsed once to validate that ``owner.name`` is in fact
+    the public-org slug — if the structure is malformed or owner.name
+    is a different value, no line is allowed. The per-line check is
+    then a regex + brace-depth walk; ``"name": "LongShortNMargin"``
+    appearing in a plugin description or any other JSON context does
+    not match because brace depth tracking places it outside the
+    owner-interior scope.
+    """
+    allowed: Set[int] = set()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return allowed
+    if not isinstance(data, dict):
+        return allowed
+    owner = data.get("owner")
+    if not isinstance(owner, dict):
+        return allowed
+    name = owner.get("name")
+    if not isinstance(name, str) or not PUBLIC_ORG_SLUG_RE.fullmatch(name):
+        return allowed
+
+    name_re = re.compile(
+        r'^\s*"name"\s*:\s*"' + re.escape(name) + r'"\s*,?\s*$'
+    )
+    owner_open_re = re.compile(r'"owner"\s*:\s*\{')
+
+    in_owner = False
+    owner_interior_depth = -1
+    cur_depth = 0
+    for idx, line in enumerate(text.splitlines(), start=1):
+        opens = line.count("{")
+        closes = line.count("}")
+        # Detect the line that opens the owner object. The owner
+        # object's interior is one deeper than the line-start depth.
+        if not in_owner and owner_open_re.search(line):
+            in_owner = True
+            owner_interior_depth = cur_depth + 1
+        cur_depth += opens - closes
+        # The owner-name line carries no braces of its own and sits at
+        # owner_interior_depth. Check after applying this line's
+        # braces so the opening-line itself (which lands at the
+        # interior depth) does not match — that line contains
+        # `"owner": {`, not the name regex anyway.
+        if in_owner and cur_depth == owner_interior_depth:
+            if name_re.match(line):
+                allowed.add(idx)
+        if in_owner and cur_depth < owner_interior_depth:
+            in_owner = False
+            owner_interior_depth = -1
+    return allowed
+
+
+def _public_org_allowed_lines(rel_path: str, text: str) -> Set[int]:
+    """Build the set of line numbers in ``text`` where the public-org
+    slug is permitted, given the file's path. Returns an empty set for
+    files outside the allow-list — every match in those files trips
+    the scanner.
+    """
+    if rel_path == ".claude-plugin/marketplace.json":
+        return _marketplace_json_allowed_lines(text)
+    if rel_path == "README.md":
+        return _readme_allowed_lines(text)
+    if rel_path == "MARKETPLACE.md":
+        return _marketplace_md_allowed_lines(text)
+    return set()
 
 
 def scan_file(filepath: Path, rel_path: str = "") -> List[Violation]:
@@ -270,19 +450,27 @@ def scan_file(filepath: Path, rel_path: str = "") -> List[Violation]:
     except (OSError, PermissionError):
         return violations
 
+    # Compute the per-line allow set for the public-org slug once. For
+    # files outside the predicate allow-list this is the empty set and
+    # the in-loop check below short-circuits cheaply.
+    if rel_path in PUBLIC_ORG_PREDICATE_PATHS:
+        org_allowed_lines = _public_org_allowed_lines(rel_path, text)
+    else:
+        org_allowed_lines = set()
+
     for line_no, line in enumerate(text.splitlines(), start=1):
         for bp in BANNED_PATTERNS:
             match = bp.pattern.search(line)
             if not match:
                 continue
-            # Apply the public-org allow-list: a match against the
-            # public-org slug pattern in one of the install-surface
-            # files is permitted (and only that pattern, in those
-            # files — every other pattern still trips the scanner).
+            # Public-org slug allowance: a `longshortnmargin` match on
+            # a line that satisfies the file's context predicate is
+            # permitted. Every other pattern — and the slug pattern in
+            # any other file — still trips the scanner.
             if (
                 bp.category == "user_id"
                 and PUBLIC_ORG_SLUG_RE.fullmatch(match.group())
-                and _is_public_org_allowed(rel_path, line)
+                and line_no in org_allowed_lines
             ):
                 continue
             violations.append(

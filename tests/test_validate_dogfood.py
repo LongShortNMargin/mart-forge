@@ -313,10 +313,21 @@ class TestSemanticVerification:
         assert "input_artifact" in text or "output_artifact" in text
 
 
-class TestM1ChangeWitness:
-    """M1: the prior `--check-semantics` accepted a real-skill entry
-    that named an existing path as BOTH artifacts (the `cp README.md`
-    bypass). A real invocation must show evidence of change.
+class TestCoherenceCheck:
+    """Coherence check (historically the ``M1`` "change-witness"
+    block). The reviewer's round-2 bypass was a real-skill entry
+    that named an existing path as BOTH artifacts (the
+    ``cp README.md`` shape); the checks below close that specific
+    bypass.
+
+    Per the orchestrator's round-3 ruling (EMB-322, 2026-06-01), the
+    gate is documented as **coherence-only** — it raises the cost of
+    fabrication but does NOT prove the skill ran. The
+    ``test_distinct_paths_passes`` case below codifies the design
+    boundary: two distinct existing paths pass without an explicit
+    git witness, and that is by design, tracked under TD-006 in
+    ``docs/tech-debt-tracker.md`` for the future Phase-G
+    invocation-proof gate.
     """
 
     def _make_repo_with_skill(self, tmp_path: Path, skill_name: str) -> Path:
@@ -330,8 +341,9 @@ class TestM1ChangeWitness:
         return tmp_path
 
     def test_identical_path_artifacts_rejected(self, tmp_path: Path) -> None:
-        """The reviewer's exact bypass: real skill + identical existing
-        path as input AND output. Before M1 this passed.
+        """The reviewer's exact round-2 bypass: real skill + identical
+        existing path as input AND output. Before the coherence check
+        this passed.
         """
         repo = self._make_repo_with_skill(tmp_path, "mart-brd")
         log = _write_log(
@@ -344,7 +356,7 @@ class TestM1ChangeWitness:
         )
         errors = validate_file(log, check_semantics=True, repo_root=repo)
         assert errors, (
-            "M1 regression: identical input/output artifacts slipped through"
+            "Coherence regression: identical input/output artifacts slipped through"
         )
         assert any(
             "identical" in err and "input_artifact" in err and "output_artifact" in err
@@ -366,7 +378,25 @@ class TestM1ChangeWitness:
         assert any("identical" in err for err in errors)
 
     def test_distinct_paths_passes(self, tmp_path: Path) -> None:
-        """When the artifacts genuinely differ the entry is accepted."""
+        """Two distinct existing paths pass the coherence check
+        without a git-witness diff.
+
+        This is **by design**, not a missed adversarial case. The
+        orchestrator's round-3 ruling (EMB-322, 2026-06-01) accepted
+        the gate as coherence-only — proving the entry is
+        structurally well-formed (real skill, distinct existing
+        artifacts, plausible timestamp, SHA-touch when applicable)
+        rather than proving the skill ran. Invocation proof requires
+        the agent runtime writing the log itself, contemporaneous
+        with the invocation; that gate lives under TD-006 in
+        ``docs/tech-debt-tracker.md`` and is the Phase G concern.
+
+        A future reader looking at this test should understand: the
+        intent is NOT to defeat ``pick two existing files and call
+        it a day``; the intent is to defeat ``write a log entry that
+        the validator silently accepts without checking any of its
+        fields`` (the original round-1 bypass).
+        """
         repo = self._make_repo_with_skill(tmp_path, "mart-brd")
         (repo / "OUTPUT.md").write_text("# output\n", encoding="utf-8")
         log = _write_log(

@@ -1,17 +1,55 @@
 #!/usr/bin/env python3
 """Dogfood log validator for mart-forge CI.
 
-Enforces the schema of `.skill-invocations.jsonl` and rejects entries
-that look fabricated. Closes reviewer findings #2 and #3 from EMB-321:
+**This is a coherence gate, not invocation proof.**
 
-#2 — A missing or whitespace-only log used to pass. With
-``--require-non-empty`` (default on in CI for any branch other than
-the initial bootstrap) the absence of entries is treated as failure.
+The validator enforces the schema of ``.skill-invocations.jsonl`` and
+rejects entries that are structurally malformed or implausible. What
+it does NOT do is prove that the named skill actually ran — that
+proof can only come from the agent runtime (Phase G) writing the log
+itself, contemporaneous with the invocation. After-the-fact entries
+authored by a human or another agent will always be one ``cp`` away
+from looking real to a coherence check; the gate's job is to make
+that ``cp`` cost rise enough that fabrication is obvious in review,
+not to make it impossible.
 
-#3 — Semantic verification: ``skill_name`` is checked against the
-on-disk skill catalog (``./skills/{group}/{name}/SKILL.md``), the
-``input_artifact`` / ``output_artifact`` fields are checked against
-the working tree or git, and obvious-future timestamps are rejected.
+The flag ``--check-semantics`` is the historical name for the
+coherence check (kept stable so the CI invocation does not churn).
+The framing in code comments below uses "coherence" intentionally to
+match the framing the orchestrator landed on in the EMB-322 round-3
+ruling (2026-06-01). The tech-debt entry that tracks the move to a
+real invocation gate lives at ``docs/tech-debt-tracker.md`` (TD-006).
+
+What the coherence check verifies:
+
+- ``reconstructed`` is ``false`` and a boolean (closes EMB-321 #4).
+- ``--require-non-empty`` rejects missing / whitespace-only logs.
+- ``skill_name`` exists in the on-disk skill catalog at
+  ``./skills/{group}/{name}/SKILL.md`` — names not in the catalog
+  are typos or fabrications.
+- Timestamps parse as ISO-8601 and are not more than 5 minutes in
+  the future (clock-skew tolerance).
+- ``input_artifact`` and ``output_artifact`` each resolve as a path
+  in the work tree, a git SHA, or a named ref.
+- ``input_artifact`` and ``output_artifact`` are not identical
+  strings — a real invocation must show *some* difference between
+  what went in and what came out. (Closes the round-2 ``cp README.md``
+  bypass.)
+- When ``output_artifact`` is a git SHA whose commit is reachable,
+  the commit must touch the path named in ``input_artifact`` — a
+  recorded skill that produced no diff against its input recorded
+  no work.
+
+What the coherence check does NOT verify:
+
+- That the skill ran. A real-named skill with two distinct existing
+  paths as artifacts passes — see
+  ``tests/test_validate_dogfood.py::TestM1ChangeWitness::test_distinct_paths_passes``
+  for the documented design boundary.
+- That the operator did not pick an unrelated historical SHA and
+  inherit its diff as fake evidence. The SHA-touch check verifies
+  the SHA touched the named path; it does NOT verify the named
+  skill ran.
 
 Exit code 1 on any failure, 0 if clean.
 """
@@ -134,10 +172,13 @@ def _commit_touches_path(repo_root: Path, sha: str, path: str) -> Optional[bool]
     parent, False if the diff is empty, and None if the answer cannot
     be determined (no parent / git unavailable).
 
-    Used by the M1 hardening: a dogfood entry where `output_artifact` is
-    a commit SHA must show that the commit actually touched
-    `input_artifact`. Without this check the entry only proves the SHA
-    exists, not that the recorded skill produced any change.
+    Used by the coherence check: a dogfood entry where
+    ``output_artifact`` is a commit SHA must show that the commit
+    actually touched ``input_artifact``. The check proves SOME diff
+    exists between input and output — it does NOT prove the recorded
+    skill produced it (an operator could pick any historical SHA that
+    touched the named path and inherit its diff). See the module
+    docstring's "What the coherence check does NOT verify" list.
     """
     try:
         parent = subprocess.run(
@@ -268,17 +309,27 @@ def validate_line(
                 f"git ref (SHA / branch / tag)."
             )
 
-        # 4. M1: change-witness check. The reviewer's bypass was
-        #    'real-skill + identical existing path as BOTH artifacts'
-        #    — the entry was field-shape-valid but proved nothing.
-        #    A real invocation must show evidence of change:
+        # 4. Coherence: identical-artifact + SHA-touch checks.
         #
-        #    - input_artifact and output_artifact cannot be the same
-        #      string (string equality is the lower bound: identical
-        #      paths or identical SHAs both imply no change).
+        #    The round-2 review surfaced a bypass where the entry
+        #    named an existing path as BOTH artifacts (the
+        #    ``cp README.md`` shape) — field-shape-valid but
+        #    proving nothing. The two checks below close THAT
+        #    specific bypass:
+        #
+        #    - input_artifact and output_artifact cannot be the
+        #      same string (string equality is the lower bound:
+        #      identical paths or identical SHAs both imply no
+        #      change).
         #    - When output_artifact is a git SHA, the commit must
         #      touch input_artifact (or be a root commit, which has
         #      no prior state to diff against).
+        #
+        #    These checks raise the cost of fabrication but do not
+        #    eliminate it. See the module docstring for the explicit
+        #    list of what this gate does and does not verify; the
+        #    invocation-proof gate is tracked under TD-006 in
+        #    docs/tech-debt-tracker.md.
         if isinstance(in_art, str) and isinstance(out_art, str) and in_art == out_art:
             errors.append(
                 f"{filepath}:{line_no}: 'input_artifact' and 'output_artifact' "
@@ -404,8 +455,14 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument(
         "--check-semantics",
         action="store_true",
-        help="Cross-check skill_name against ./skills/, verify "
-             "input/output artifacts resolve, and reject future timestamps.",
+        help=(
+            "Enable the coherence check (historical flag name; see the "
+            "module docstring for what coherence verifies vs. what it "
+            "does NOT). Cross-checks skill_name against ./skills/, "
+            "resolves input/output artifacts, rejects future timestamps, "
+            "rejects identical input/output, and requires a SHA-touch "
+            "diff when output_artifact is a SHA."
+        ),
     )
     parser.add_argument(
         "--repo-root",

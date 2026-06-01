@@ -240,36 +240,233 @@ class TestAdversarial:
 
 
 class TestPublicOrgAllowList:
-    """B2: the public GitHub org slug `LongShortNMargin` is allowed
-    in three narrow install-surface files. Everywhere else, the slug
-    still trips the scanner. The orchestrator spec clarification
-    (EMB-322, 2026-06-01) governs this carve-out.
+    """B2: the public GitHub org slug `LongShortNMargin` is allowed in
+    three narrow install-surface files, and ONLY where a NARROW
+    context predicate holds — the orchestrator's round-3 ruling
+    (EMB-322, 2026-06-01) is explicit that file-wide allowance is too
+    loose because it lets the slug drift onto README badges, contributor
+    lines, quoted excerpts, or arbitrary JSON keys without tripping CI.
+
+    The predicates the scanner now enforces:
+
+    - ``.claude-plugin/marketplace.json`` — only on the
+      ``"name": "<slug>"`` line under the top-level ``owner`` object.
+    - ``README.md`` — only on a line inside a fenced ``bash`` /
+      ``shell`` / ``console`` block that also contains
+      ``/plugin marketplace add `` or ``git clone https://github.com/``.
+    - ``MARKETPLACE.md`` — only inside an H2 section whose heading is
+      ``Submission steps``, ``How to submit``, or
+      ``Submitting to the marketplace`` (case-insensitive).
     """
 
-    def test_slug_allowed_in_marketplace_json(self, tmp_path: Path) -> None:
+    # ------------------ marketplace.json -----------------------------
+    def test_slug_allowed_at_owner_name_in_marketplace_json(
+        self, tmp_path: Path
+    ) -> None:
         cp_dir = tmp_path / ".claude-plugin"
         cp_dir.mkdir()
         (cp_dir / "marketplace.json").write_text(
-            '{"owner": {"name": "LongShortNMargin"}}\n', encoding="utf-8"
+            '{\n'
+            '  "name": "mart-forge",\n'
+            '  "owner": {\n'
+            '    "name": "LongShortNMargin"\n'
+            '  },\n'
+            '  "plugins": []\n'
+            '}\n',
+            encoding="utf-8",
         )
         assert scan_directory(str(tmp_path)) == []
 
-    def test_slug_allowed_in_readme(self, tmp_path: Path) -> None:
+    def test_slug_blocked_outside_owner_in_marketplace_json(
+        self, tmp_path: Path
+    ) -> None:
+        """B2 round-3: the slug as a plugin name (or anywhere else
+        inside marketplace.json that isn't ``owner.name``) must
+        be rejected — the predicate is structural, not file-level.
+        """
+        cp_dir = tmp_path / ".claude-plugin"
+        cp_dir.mkdir()
+        (cp_dir / "marketplace.json").write_text(
+            '{\n'
+            '  "name": "mart-forge",\n'
+            '  "owner": {\n'
+            '    "name": "real-org"\n'
+            '  },\n'
+            '  "plugins": [{"name": "LongShortNMargin"}]\n'
+            '}\n',
+            encoding="utf-8",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations, (
+            "B2 round-3 regression: slug outside owner.name must trip"
+        )
+        assert any(v.category == "user_id" for v in violations)
+
+    # ------------------ README.md ------------------------------------
+    def test_slug_allowed_in_readme_bash_install_block(
+        self, tmp_path: Path
+    ) -> None:
         _write(
             tmp_path,
             "README.md",
-            "Install via /plugin marketplace add LongShortNMargin/mart-forge\n",
+            "## Install\n\n"
+            "```bash\n"
+            "/plugin marketplace add LongShortNMargin/mart-forge\n"
+            "```\n",
         )
         assert scan_directory(str(tmp_path)) == []
 
-    def test_slug_allowed_in_marketplace_md(self, tmp_path: Path) -> None:
+    def test_slug_allowed_in_readme_shell_clone_block(
+        self, tmp_path: Path
+    ) -> None:
+        _write(
+            tmp_path,
+            "README.md",
+            "## Local dev\n\n"
+            "```shell\n"
+            "git clone https://github.com/LongShortNMargin/mart-forge\n"
+            "```\n",
+        )
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_readme_bypass_prose_insertion_rejected(self, tmp_path: Path) -> None:
+        """B2 round-3 reviewer reproduction. Before the predicate fix,
+        ``Maintained by longshortnmargin in their spare time.`` (plain
+        prose, outside any code block) passed because the allow-list
+        was file-wide. The narrow predicate must reject it.
+        """
+        _write(
+            tmp_path,
+            "README.md",
+            "# mart-forge\n\nMaintained by LongShortNMargin in their spare time.\n",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations, (
+            "B2 round-3 regression: README prose insertion of slug must trip"
+        )
+        assert any(v.category == "user_id" for v in violations)
+
+    def test_readme_bypass_in_non_shell_block_rejected(
+        self, tmp_path: Path
+    ) -> None:
+        """A ``python`` / ``text`` / ``json`` fenced block does NOT
+        count as a shell context — the predicate is restricted to
+        ``bash`` / ``shell`` / ``console`` so a future paste of the
+        slug into a JSON example or python snippet does not silently
+        slip through.
+        """
+        _write(
+            tmp_path,
+            "README.md",
+            "```python\n# install via LongShortNMargin/mart-forge\n```\n",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations
+        assert any(v.category == "user_id" for v in violations)
+
+    def test_readme_bypass_text_block_rejected(self, tmp_path: Path) -> None:
+        """``text`` is a common info string but explicitly excluded by
+        the predicate. This is the exact difference between the
+        round-2 wide allowance and the round-3 narrow allowance.
+        """
+        _write(
+            tmp_path,
+            "README.md",
+            "```text\n/plugin marketplace add LongShortNMargin/mart-forge\n```\n",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations
+        assert any(v.category == "user_id" for v in violations)
+
+    def test_readme_bypass_shell_block_without_install_command_rejected(
+        self, tmp_path: Path
+    ) -> None:
+        """Slug inside a bash block on a line that does NOT carry the
+        install or clone marker. The predicate requires BOTH the shell
+        info string AND the install-line marker.
+        """
+        _write(
+            tmp_path,
+            "README.md",
+            "```bash\necho LongShortNMargin\n```\n",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations
+
+    # ------------------ MARKETPLACE.md -------------------------------
+    def test_slug_allowed_in_submission_steps_section(
+        self, tmp_path: Path
+    ) -> None:
         _write(
             tmp_path,
             "MARKETPLACE.md",
+            "## Overview\n\nIntro text.\n\n"
+            "## Submission steps\n\n"
             "Add LongShortNMargin/mart-forge to the community directory.\n",
         )
         assert scan_directory(str(tmp_path)) == []
 
+    def test_slug_allowed_in_how_to_submit_section(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "MARKETPLACE.md",
+            "## How to submit\n\n"
+            "Add LongShortNMargin/mart-forge to the community directory.\n",
+        )
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_slug_allowed_under_h3_inside_submission_section(
+        self, tmp_path: Path
+    ) -> None:
+        """H3+ subsections still inherit the parent H2's allowance."""
+        _write(
+            tmp_path,
+            "MARKETPLACE.md",
+            "## Submission steps\n\n"
+            "### Tag the release\n\n"
+            "Reference LongShortNMargin/mart-forge in the tag message.\n",
+        )
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_marketplace_md_bypass_outside_section_rejected(
+        self, tmp_path: Path
+    ) -> None:
+        """B2 round-3: the slug outside the explicit submission section
+        must be rejected. The orchestrator's spec scoped the allowance
+        to a named section; today the only mention is in that section,
+        but nothing in the code enforced the scope before this fix.
+        """
+        _write(
+            tmp_path,
+            "MARKETPLACE.md",
+            "## Overview\n\nMaintained by LongShortNMargin.\n",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations, (
+            "B2 round-3 regression: MARKETPLACE.md slug outside the "
+            "submission section must trip"
+        )
+        assert any(v.category == "user_id" for v in violations)
+
+    def test_marketplace_md_section_closes_at_next_h2(
+        self, tmp_path: Path
+    ) -> None:
+        """The submission-section allowance ends at the next H2 — the
+        following section is back to the default deny.
+        """
+        _write(
+            tmp_path,
+            "MARKETPLACE.md",
+            "## Submission steps\n\n"
+            "Add LongShortNMargin/mart-forge.\n\n"
+            "## In-flight submissions\n\n"
+            "Maintained by LongShortNMargin.\n",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations
+        assert any(v.category == "user_id" for v in violations)
+
+    # ------------------ cross-cutting --------------------------------
     def test_slug_blocked_in_a_random_skill_body(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / "skills" / "lifecycle" / "demo"
         skill_dir.mkdir(parents=True)

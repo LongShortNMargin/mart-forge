@@ -6,10 +6,12 @@ top of the repo.
 
 ## What you are working on
 
-mart-forge is a methodology-first framework that scaffolds Kimball data
-warehouses. The product is the **framework itself** — the skills, templates,
-linters, and SPEC that an agent uses to build a warehouse for a specific
-mart. The framework lives on `main`; specific warehouses live elsewhere.
+mart-forge is a Claude Code marketplace plugin pack for lifecycle-first
+Kimball data warehouses. The product is the **plugin pack itself** — the
+skills under `./skills/{lifecycle,workflow,duckdb,quality}/`, the
+templates, the linters, and the SPEC that an agent uses to build a
+warehouse for a specific mart. The pack lives on `main`; specific
+warehouses live elsewhere.
 
 The governance contract is `SPEC.md`. Read it before making decisions about
 gate behavior, lifecycle, or artifact format.
@@ -60,7 +62,9 @@ the result. Each arrow is a hard gate — no skipping.
 
 | File | What it covers |
 |------|----------------|
-| `.claude/skills/` | The skills you can invoke (every file is one skill) |
+| `.claude/skills/` | Symlinks → `./skills/{group}/{name}` (local-dev mirror; auto-loaded by Claude Code) |
+| `./skills/` | Source of truth: 21 skills in 4 groups (lifecycle, workflow, duckdb, quality) |
+| `.claude-plugin/marketplace.json` | Marketplace manifest — installs by plugin group |
 | `.claude/settings.json` | Hooks and permissions |
 | `.claude/worktree_init.sh` | Worktree primitive (used by `/pull`, `/push`) |
 | `docs/design-docs/0001-skill-contract.md` | What a SKILL.md must contain |

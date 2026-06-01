@@ -135,7 +135,39 @@ adversarial pressure.
 `tests/test_lint_*.py` with a test class named `class TestAdversarial`
 that exercises bypass cases.
 
-## 10. Custom error messages include remediation
+## 10. Marketplace shape with a local-dev mirror
+
+mart-forge ships as a Claude Code marketplace plugin pack:
+`.claude-plugin/marketplace.json` declares four plugins, each pointing
+into `./skills/{group}/{name}/`. The lifecycle / workflow / duckdb /
+quality split is for installability — a team can pull only the layers
+it needs.
+
+For local development against the repo itself (i.e., agents working on
+mart-forge), `.claude/skills/<name>/` is a tree of **symlinks** into
+`./skills/{group}/{name}/`. Claude Code's per-repo skill auto-load
+walks `.claude/skills/`, and the symlinks make it see the same skills
+the marketplace ships.
+
+**Why two shapes.** The marketplace consumer wants logical groupings
+(lifecycle vs. workflow vs. duckdb vs. quality) so they can install
+subsets. The per-repo Claude Code agent does not care about grouping —
+it just wants a flat list of invocable skills. The symlink mirror is
+the cheapest way to satisfy both without duplication.
+
+**Source of truth.** `./skills/{group}/{name}/` is the source of truth.
+`.claude/skills/<name>/` is generated. If a skill is added or moved,
+update the marketplace.json and re-create the symlink. The committed
+symlinks survive `git clone` on macOS / Linux. On Windows, run
+`python scripts/sync_local_skills.py` (a helper that recreates the
+mirror) — symbolic-link permissions there are not always available.
+
+**How enforced.** `scripts/validate_marketplace.py` walks the manifest
+and checks every skill path resolves to a directory containing a valid
+`SKILL.md`. The pytest suite asserts the manifest declares exactly
+four plugins and the skill count matches the on-disk tree.
+
+## 11. Custom error messages include remediation
 
 When a linter fails, the error message names the file, the location,
 the rule, and the fix — usually with a pointer to the template that

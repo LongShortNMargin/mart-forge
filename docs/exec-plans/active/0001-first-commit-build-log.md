@@ -35,8 +35,14 @@ with every gap honestly documented.
   one adversarial probe), plus `tests/skill-testing/` with catalog,
   rubric, and per-skill behavioral specs.
 - `.github/workflows/`: `framework-ci.yml`, `pr-description-lint.yml`.
-- `pyproject.toml`, `.gitignore`, `.skill-invocations.jsonl` (REAL log
-  of this build's skill invocations).
+- `pyproject.toml`, `.gitignore`, `.skill-invocations.jsonl`. This log
+  contains a single entry recording the `commit` skill firing once,
+  after the framework files existed. It is NOT a claim that "the
+  framework built itself" — most of the lifecycle skills had no
+  artifact to operate on at that point. Phase G (the GME warehouse
+  example, deferred to MFOR-003) is where the dogfood log actually
+  exercises every methodology skill end-to-end. The honest gap is
+  documented here, not hidden behind a fabricated entry.
 
 ## What this commit excludes
 

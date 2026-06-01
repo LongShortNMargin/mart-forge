@@ -133,3 +133,68 @@ skills:
     last_static_result: ""
     last_spec: ""
     last_spec_result: ""
+
+  # --- duckdb skills ---------------------------------------------------
+  - name: creating-duckdb-mart
+    spec: specs/creating-duckdb-mart.spec.md
+    category: duckdb
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: motherduck-deploy
+    spec: specs/motherduck-deploy.spec.md
+    category: duckdb
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: duckdb-incremental-models
+    spec: specs/duckdb-incremental-models.spec.md
+    category: duckdb
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  # --- quality skills --------------------------------------------------
+  - name: 8-control-dqc-audit
+    spec: specs/8-control-dqc-audit.spec.md
+    category: quality
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: naming-conventions-lint
+    spec: specs/naming-conventions-lint.spec.md
+    category: quality
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: grain-rules-check
+    spec: specs/grain-rules-check.spec.md
+    category: quality
+    priority: high
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""
+
+  - name: signing-enforcement
+    spec: specs/signing-enforcement.spec.md
+    category: quality
+    priority: critical
+    last_static: ""
+    last_static_result: ""
+    last_spec: ""
+    last_spec_result: ""

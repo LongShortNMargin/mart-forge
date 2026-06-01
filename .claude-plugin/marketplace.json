@@ -1,0 +1,65 @@
+{
+  "name": "mart-forge",
+  "owner": {
+    "name": "your-mart-org"
+  },
+  "metadata": {
+    "description": "Lifecycle-first Kimball methodology pack for Claude Code — BRD → TDD → scaffold → DQC, plus DuckDB warehouse skills",
+    "version": "3.0.0"
+  },
+  "plugins": [
+    {
+      "name": "mart-forge-lifecycle",
+      "description": "Phased Kimball mart lifecycle: source discovery → BRD → TDD → scaffold → DQC, with signing gates between phases",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/lifecycle/source-discovery",
+        "./skills/lifecycle/mart-brd",
+        "./skills/lifecycle/mart-tdd",
+        "./skills/lifecycle/mart-bootstrap",
+        "./skills/lifecycle/mart-dqc",
+        "./skills/lifecycle/mart-review",
+        "./skills/lifecycle/schema-evolve",
+        "./skills/lifecycle/using-mart-forge"
+      ]
+    },
+    {
+      "name": "mart-forge-workflow",
+      "description": "Git and tracker plumbing for mart-forge: commit, debug, land, pull, push, linear",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/workflow/commit",
+        "./skills/workflow/debug",
+        "./skills/workflow/land",
+        "./skills/workflow/linear",
+        "./skills/workflow/pull",
+        "./skills/workflow/push"
+      ]
+    },
+    {
+      "name": "mart-forge-duckdb",
+      "description": "DuckDB + MotherDuck warehouse skills: incremental models, deploy profile, partition strategies",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/duckdb/creating-duckdb-mart",
+        "./skills/duckdb/motherduck-deploy",
+        "./skills/duckdb/duckdb-incremental-models"
+      ]
+    },
+    {
+      "name": "mart-forge-quality",
+      "description": "Eight-control DQC catalog, naming-convention lint, grain-rules check, and signing gate enforcement",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/quality/8-control-dqc-audit",
+        "./skills/quality/naming-conventions-lint",
+        "./skills/quality/grain-rules-check",
+        "./skills/quality/signing-enforcement"
+      ]
+    }
+  ]
+}

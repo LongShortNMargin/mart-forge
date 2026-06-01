@@ -90,10 +90,98 @@ class TestSelfExclusion:
     def test_scanner_excludes_itself(self) -> None:
         # The scanner file contains every banned pattern; if it were
         # scanned, the whole suite would explode. Confirm the file is
-        # excluded by name.
-        from scripts.confidentiality_scan import EXCLUDED_FILENAMES
+        # excluded by relative path (not basename — see finding #9).
+        from scripts.confidentiality_scan import EXCLUDED_PATHS
 
-        assert "confidentiality_scan.py" in EXCLUDED_FILENAMES
+        assert "scripts/confidentiality_scan.py" in EXCLUDED_PATHS
+
+
+class TestDotDirScanning:
+    """Reviewer finding #1: dot-prefixed directories at any depth used to
+    be silently skipped, so banned strings in `.claude/`, `.claude-plugin/`,
+    and `.github/` slipped past CI.
+
+    The scanner now uses an explicit allow-list (`ALLOWED_DOT_DIR_SKIPS`);
+    any dot-dir not on that list is walked.
+    """
+
+    @pytest.mark.parametrize(
+        "rel_dir",
+        [
+            ".claude/skills/source-discovery",
+            ".claude-plugin",
+            ".github/workflows",
+        ],
+    )
+    def test_banned_string_in_dot_dir_is_caught(
+        self, tmp_path: Path, rel_dir: str
+    ) -> None:
+        dot_dir = tmp_path / rel_dir
+        dot_dir.mkdir(parents=True)
+        (dot_dir / "leaked.md").write_text(
+            "This file accidentally names Shopee in the prose.\n",
+            encoding="utf-8",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations, (
+            f"finding #1 regression: scanner missed banned string in {rel_dir}"
+        )
+        assert any(v.category == "internal_project" for v in violations)
+
+    def test_git_dir_still_skipped(self, tmp_path: Path) -> None:
+        git_dir = tmp_path / ".git" / "objects"
+        git_dir.mkdir(parents=True)
+        # .git is on the allow-list so its files are never scanned.
+        (git_dir / "fake.txt").write_text("Shopee\n", encoding="utf-8")
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_pycache_still_skipped(self, tmp_path: Path) -> None:
+        pyc = tmp_path / "__pycache__"
+        pyc.mkdir()
+        (pyc / "fake.py").write_text("# DROOK\n", encoding="utf-8")
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_yaml_workflow_in_github_dir_scanned(self, tmp_path: Path) -> None:
+        wf_dir = tmp_path / ".github" / "workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "framework-ci.yml").write_text(
+            "# CI for Shopee data warehouse\n",
+            encoding="utf-8",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations
+        assert any(v.category == "internal_project" for v in violations)
+
+
+class TestRelativePathExclusion:
+    """Reviewer finding #9: EXCLUDED_FILENAMES used to match basename
+    only, so `templates/confidentiality_scan.py` (or any file with that
+    name anywhere in the tree) bypassed the scan. Exclusion now matches
+    the relative path so only the real scanner file is exempt.
+    """
+
+    def test_decoy_file_with_scanner_basename_is_still_scanned(
+        self, tmp_path: Path
+    ) -> None:
+        decoy_dir = tmp_path / "templates"
+        decoy_dir.mkdir()
+        (decoy_dir / "confidentiality_scan.py").write_text(
+            "# decoy named like the scanner, leaks Shopee\n",
+            encoding="utf-8",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations, "finding #9 regression: basename-match bypass still works"
+
+    def test_real_scanner_path_still_excluded(self, tmp_path: Path) -> None:
+        # Create the actual relative path the scanner uses for itself.
+        scripts_dir = tmp_path / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "confidentiality_scan.py").write_text(
+            "# pretend this is the scanner — banned strings inside should not fire\n"
+            "# DROOK FHAG vuduclong0309\n",
+            encoding="utf-8",
+        )
+        assert scan_directory(str(tmp_path)) == []
 
 
 class TestAdversarial:

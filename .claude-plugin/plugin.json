@@ -1,7 +1,0 @@
-{
-  "name": "mart-forge",
-  "version": "3.0.0-rc.1",
-  "description": "Methodology-first, agent-executable framework for scaffolding Kimball data warehouses",
-  "skills_directory": ".claude/skills",
-  "settings": ".claude/settings.json"
-}

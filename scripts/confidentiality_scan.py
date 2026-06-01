@@ -26,12 +26,33 @@ SCAN_EXTENSIONS = {
     ".toml", ".sh", ".jsonl", ".cfg", ".ini",
 }
 
-# Files the scanner excludes from its own scan. The scanner file itself is
-# excluded because it must define the patterns it is rejecting. Other
-# entries must each justify their exclusion in a comment beside them.
-EXCLUDED_FILENAMES = {
-    "confidentiality_scan.py",        # this file defines the patterns
-    "test_confidentiality.py",        # tests assert against the patterns
+# Paths the scanner excludes from its own scan. Each entry is matched
+# against the file's path relative to the scan root (POSIX separators),
+# not just the basename — a `templates/confidentiality_scan.py` placed
+# anywhere in the tree is still scanned. The scanner file itself is
+# excluded because it must define the patterns it is rejecting.
+EXCLUDED_PATHS = {
+    "scripts/confidentiality_scan.py",  # this file defines the patterns
+    "tests/test_confidentiality.py",    # tests assert against the patterns
+}
+
+# Dot-prefixed directory names allowed to be skipped during the walk.
+# Anything not on this allow-list — most importantly `.claude/`,
+# `.claude-plugin/`, `.github/` — must be scanned. This is the fix for
+# the reviewer finding "confidentiality_scan silently skips every
+# dot-prefixed directory at any depth": prior code did
+# `any(part.startswith(".") for part in rel_dir.parts)`, which
+# excluded the agent-authored skill files most likely to leak codenames.
+ALLOWED_DOT_DIR_SKIPS = {
+    ".git",
+    ".venv",
+    ".pytest_cache",
+    "__pycache__",   # never starts with ".", listed for symmetry
+    "node_modules",  # idem
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".eggs",
 }
 
 
@@ -224,14 +245,23 @@ def scan_file(filepath: Path) -> List[Violation]:
 
 
 def iter_files(root: Path) -> Iterable[Path]:
-    for dirpath, _dirnames, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
-        if any(part.startswith(".") for part in rel_dir.parts if part != "."):
-            # Skip hidden directories like .git, but allow root.
+
+        # Prune walk: drop disallowed dot-dirs in-place so os.walk does
+        # not descend into them. Anything not on the allow-list (notably
+        # .claude/, .claude-plugin/, .github/) is kept.
+        dirnames[:] = [d for d in dirnames if d not in ALLOWED_DOT_DIR_SKIPS]
+
+        # Defensive: even if we already walked into a disallowed parent
+        # via a relative path, skip its files.
+        if any(part in ALLOWED_DOT_DIR_SKIPS for part in rel_dir.parts):
             continue
+
         for fname in filenames:
             filepath = Path(dirpath) / fname
-            if filepath.name in EXCLUDED_FILENAMES:
+            rel_path = (rel_dir / fname).as_posix()
+            if rel_path in EXCLUDED_PATHS:
                 continue
             if not is_scannable(filepath):
                 continue

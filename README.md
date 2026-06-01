@@ -14,7 +14,7 @@ AltimateAI pack does not cover today.
 ## Install (Claude Code)
 
 ```text
-/plugin marketplace add your-mart-org/mart-forge
+/plugin marketplace add LongShortNMargin/mart-forge
 /plugin install mart-forge-lifecycle@mart-forge
 /plugin install mart-forge-workflow@mart-forge
 /plugin install mart-forge-duckdb@mart-forge
@@ -86,7 +86,7 @@ is missing.
 Clone the repository and run the local linter + test suite:
 
 ```bash
-git clone https://github.com/your-mart-org/mart-forge
+git clone https://github.com/LongShortNMargin/mart-forge
 cd mart-forge
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

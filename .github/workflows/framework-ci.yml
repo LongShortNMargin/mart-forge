@@ -11,6 +11,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so validate_dogfood.py --check-semantics can
+          # resolve git SHAs referenced as output_artifact in the
+          # dogfood log; a default depth-1 clone makes any historical
+          # SHA unresolvable and trips the gate spuriously.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,6 +30,13 @@ jobs:
 
       - name: Validate marketplace.json
         run: python scripts/validate_marketplace.py .claude-plugin/marketplace.json --repo-root .
+
+      - name: Check .claude/skills mirror is in sync with manifest
+        # Drift gate (EMB-322 M3): a PR that edits marketplace.json but
+        # forgets to regenerate the .claude/skills/ symlinks would ship
+        # one skill set to marketplace consumers and a different set to
+        # local-dev users. --check exits 1 on any drift.
+        run: python scripts/sync_local_skills.py --check
 
       - name: Confidentiality scan
         run: python scripts/confidentiality_scan.py .
@@ -49,6 +62,32 @@ jobs:
 
       - name: Audit signed TDDs
         run: python scripts/lint_signed_tdd.py
+
+      - name: Gate fires on signed fixture (positive control)
+        # M2: prove the signing-gate linters actually fire via the
+        # production code path. Without a fixture, both gates would
+        # exit 0 on an empty docs/marts/ tree and effectively rubber-
+        # stamp anything until a real mart lands.
+        run: |
+          python scripts/lint_signed_brd.py tests/fixtures/marts/sample-signed/business-requirements.md
+          python scripts/lint_signed_tdd.py tests/fixtures/marts/sample-signed/tech-design-doc.md
+
+      - name: Gate rejects unsigned fixture (negative control)
+        run: |
+          set +e
+          python scripts/lint_signed_brd.py tests/fixtures/marts/sample-unsigned/business-requirements.md
+          brd_exit=$?
+          python scripts/lint_signed_tdd.py tests/fixtures/marts/sample-unsigned/tech-design-doc.md
+          tdd_exit=$?
+          if [ "$brd_exit" -eq 0 ]; then
+            echo "FAIL: lint_signed_brd accepted an unsigned BRD fixture" >&2
+            exit 1
+          fi
+          if [ "$tdd_exit" -eq 0 ]; then
+            echo "FAIL: lint_signed_tdd accepted an unsigned TDD fixture" >&2
+            exit 1
+          fi
+          echo "Negative control passed: both signing gates rejected the unsigned fixtures."
 
       - name: Lint docs freshness
         run: python scripts/lint_docs_freshness.py .

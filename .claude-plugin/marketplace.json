@@ -1,7 +1,7 @@
 {
   "name": "mart-forge",
   "owner": {
-    "name": "your-mart-org"
+    "name": "LongShortNMargin"
   },
   "metadata": {
     "description": "Lifecycle-first Kimball methodology pack for Claude Code — BRD → TDD → scaffold → DQC, plus DuckDB warehouse skills",

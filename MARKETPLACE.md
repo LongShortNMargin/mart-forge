@@ -88,7 +88,7 @@ When every box above is checked:
 
 1. Tag the release commit (`v3.0.0` or whatever the next semver is).
 2. Open a PR against `anthropics/claude-plugins-community` adding
-   `your-mart-org/mart-forge` to the community directory file.
+   `LongShortNMargin/mart-forge` to the community directory file.
 3. Reference the tag in the PR description.
 4. Wait for the community reviewer.
 5. After merge, post the install commands in the project README's

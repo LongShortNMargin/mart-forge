@@ -35,6 +35,16 @@ def steps(repo_root: Path) -> List[Step]:
             ],
         ),
         Step(
+            "sync_local_skills_check",
+            [
+                sys.executable,
+                "scripts/sync_local_skills.py",
+                "--check",
+                "--repo-root",
+                str(repo_root),
+            ],
+        ),
+        Step(
             "confidentiality_scan",
             [sys.executable, "scripts/confidentiality_scan.py", "."],
         ),

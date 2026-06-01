@@ -125,6 +125,47 @@ def _artifact_resolves(
     return False
 
 
+def _is_git_sha(artifact: str) -> bool:
+    return isinstance(artifact, str) and bool(SHA_RE.match(artifact))
+
+
+def _commit_touches_path(repo_root: Path, sha: str, path: str) -> Optional[bool]:
+    """Return True if the commit `sha` changed `path` relative to its
+    parent, False if the diff is empty, and None if the answer cannot
+    be determined (no parent / git unavailable).
+
+    Used by the M1 hardening: a dogfood entry where `output_artifact` is
+    a commit SHA must show that the commit actually touched
+    `input_artifact`. Without this check the entry only proves the SHA
+    exists, not that the recorded skill produced any change.
+    """
+    try:
+        parent = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if parent.returncode != 0:
+            # Root commit (no parent) — accept; there is no prior state
+            # to diff against, and rejecting the bootstrap commit would
+            # make the gate unbootstrappable.
+            return None
+        diff = subprocess.run(
+            ["git", "diff", "--name-only", f"{sha}^..{sha}", "--", path],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if diff.returncode != 0:
+            return None
+        return bool(diff.stdout.strip())
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
+
+
 def validate_line(
     line: str,
     line_no: int,
@@ -226,6 +267,51 @@ def validate_line(
                 f"    -> remediation: point output_artifact at a real path or "
                 f"git ref (SHA / branch / tag)."
             )
+
+        # 4. M1: change-witness check. The reviewer's bypass was
+        #    'real-skill + identical existing path as BOTH artifacts'
+        #    — the entry was field-shape-valid but proved nothing.
+        #    A real invocation must show evidence of change:
+        #
+        #    - input_artifact and output_artifact cannot be the same
+        #      string (string equality is the lower bound: identical
+        #      paths or identical SHAs both imply no change).
+        #    - When output_artifact is a git SHA, the commit must
+        #      touch input_artifact (or be a root commit, which has
+        #      no prior state to diff against).
+        if isinstance(in_art, str) and isinstance(out_art, str) and in_art == out_art:
+            errors.append(
+                f"{filepath}:{line_no}: 'input_artifact' and 'output_artifact' "
+                f"are identical ({in_art!r}).\n"
+                f"    -> remediation: a real skill invocation must show a "
+                f"change between input and output. If the skill mutated a "
+                f"file in place, set output_artifact to the commit SHA that "
+                f"records the change; if the skill produced a new file, "
+                f"point output_artifact at the new path."
+            )
+
+        if (
+            isinstance(in_art, str)
+            and isinstance(out_art, str)
+            and _is_git_sha(out_art)
+            and _git_ref_exists(repo_root, out_art)
+        ):
+            # input_artifact may be a path (most common) or a SHA. Only
+            # check the diff when input_artifact looks like a path that
+            # exists or once existed in the tree.
+            input_is_path = (repo_root / in_art).exists() or "/" in in_art
+            if input_is_path and not _is_git_sha(in_art):
+                touched = _commit_touches_path(repo_root, out_art, in_art)
+                if touched is False:
+                    errors.append(
+                        f"{filepath}:{line_no}: commit {out_art!r} does not "
+                        f"touch 'input_artifact' {in_art!r}.\n"
+                        f"    -> remediation: point output_artifact at the "
+                        f"commit that actually changed input_artifact, or "
+                        f"point input_artifact at the file the skill "
+                        f"actually edited. An entry with no diff between "
+                        f"input and output records no work."
+                    )
 
     return errors
 

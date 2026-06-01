@@ -127,3 +127,38 @@ class TestSignedPrimitive:
     def test_all_placeholder_rows_fail(self, tmp_path: Path) -> None:
         p = _write(tmp_path, SIGNATURE_UNSIGNED, name="brd.md")
         assert not is_signed(p)
+
+
+class TestFixturesGate:
+    """M2: prove the signing-gate linters fire on real documents
+    discoverable via the production code path. Before this, the gates
+    ran on an empty `docs/marts/` and the reviewer's concern was that
+    the first time a real mart landed, nothing had ever exercised
+    them end-to-end.
+    """
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures" / "marts"
+
+    def test_signed_fixture_brd_accepted(self) -> None:
+        path = self.FIXTURES / "sample-signed" / "business-requirements.md"
+        assert path.exists()
+        assert brd_lint_paths([path]) == []
+
+    def test_unsigned_fixture_brd_rejected(self) -> None:
+        path = self.FIXTURES / "sample-unsigned" / "business-requirements.md"
+        assert path.exists()
+        errors = brd_lint_paths([path])
+        assert errors, "M2 regression: unsigned fixture BRD accepted by gate"
+        assert any("Signature" in err for err in errors)
+
+    def test_signed_fixture_tdd_accepted(self) -> None:
+        path = self.FIXTURES / "sample-signed" / "tech-design-doc.md"
+        assert path.exists()
+        assert tdd_lint_paths([path]) == []
+
+    def test_unsigned_fixture_tdd_rejected(self) -> None:
+        path = self.FIXTURES / "sample-unsigned" / "tech-design-doc.md"
+        assert path.exists()
+        errors = tdd_lint_paths([path])
+        assert errors, "M2 regression: unsigned fixture TDD accepted by gate"
+        assert any("Signature" in err for err in errors)

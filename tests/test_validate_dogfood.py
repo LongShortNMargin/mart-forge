@@ -203,14 +203,15 @@ class TestSemanticVerification:
         (tmp_path / "README.md").write_text("# test\n", encoding="utf-8")
         return tmp_path
 
-    def test_real_skill_with_path_artifacts_passes(self, tmp_path: Path) -> None:
+    def test_real_skill_with_distinct_path_artifacts_passes(self, tmp_path: Path) -> None:
         repo = self._make_repo_with_skill(tmp_path, "mart-brd")
+        (repo / "OUTPUT.md").write_text("# output\n", encoding="utf-8")
         log = _write_log(
             tmp_path,
             _entry(
                 skill_name="mart-brd",
                 input_artifact="README.md",
-                output_artifact="README.md",
+                output_artifact="OUTPUT.md",
             ),
         )
         errors = validate_file(log, check_semantics=True, repo_root=repo)
@@ -310,3 +311,71 @@ class TestSemanticVerification:
         text = " ".join(errors)
         assert "skill_name" in text
         assert "input_artifact" in text or "output_artifact" in text
+
+
+class TestM1ChangeWitness:
+    """M1: the prior `--check-semantics` accepted a real-skill entry
+    that named an existing path as BOTH artifacts (the `cp README.md`
+    bypass). A real invocation must show evidence of change.
+    """
+
+    def _make_repo_with_skill(self, tmp_path: Path, skill_name: str) -> Path:
+        skill_dir = tmp_path / "skills" / "lifecycle" / skill_name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {skill_name}\ndescription: stub\n---\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text("# test\n", encoding="utf-8")
+        return tmp_path
+
+    def test_identical_path_artifacts_rejected(self, tmp_path: Path) -> None:
+        """The reviewer's exact bypass: real skill + identical existing
+        path as input AND output. Before M1 this passed.
+        """
+        repo = self._make_repo_with_skill(tmp_path, "mart-brd")
+        log = _write_log(
+            tmp_path,
+            _entry(
+                skill_name="mart-brd",
+                input_artifact="README.md",
+                output_artifact="README.md",
+            ),
+        )
+        errors = validate_file(log, check_semantics=True, repo_root=repo)
+        assert errors, (
+            "M1 regression: identical input/output artifacts slipped through"
+        )
+        assert any(
+            "identical" in err and "input_artifact" in err and "output_artifact" in err
+            for err in errors
+        )
+
+    def test_identical_sha_artifacts_rejected(self, tmp_path: Path) -> None:
+        """The string-equality lower bound catches identical SHAs too."""
+        repo = self._make_repo_with_skill(tmp_path, "mart-brd")
+        log = _write_log(
+            tmp_path,
+            _entry(
+                skill_name="mart-brd",
+                input_artifact="abc123def",
+                output_artifact="abc123def",
+            ),
+        )
+        errors = validate_file(log, check_semantics=True, repo_root=repo)
+        assert any("identical" in err for err in errors)
+
+    def test_distinct_paths_passes(self, tmp_path: Path) -> None:
+        """When the artifacts genuinely differ the entry is accepted."""
+        repo = self._make_repo_with_skill(tmp_path, "mart-brd")
+        (repo / "OUTPUT.md").write_text("# output\n", encoding="utf-8")
+        log = _write_log(
+            tmp_path,
+            _entry(
+                skill_name="mart-brd",
+                input_artifact="README.md",
+                output_artifact="OUTPUT.md",
+            ),
+        )
+        errors = validate_file(log, check_semantics=True, repo_root=repo)
+        assert errors == []

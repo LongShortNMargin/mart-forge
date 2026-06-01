@@ -20,8 +20,15 @@ import sys
 from pathlib import Path
 from typing import Iterable, List
 
+# Allow running the script directly via `python scripts/lint_signed_tdd.py`
+# without first running `pip install -e .`: prepend the repo root to
+# sys.path so the sibling `scripts/lint_signed_brd.py` is importable.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 # Reuse the BRD signing primitives; the signature shape is identical.
-from scripts.lint_signed_brd import (
+from scripts.lint_signed_brd import (  # noqa: E402
     _is_template,
     is_signed,
     lint_paths as _lint_paths_for_doctype,

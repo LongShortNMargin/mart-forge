@@ -36,6 +36,26 @@ EXCLUDED_PATHS = {
     "tests/test_confidentiality.py",    # tests assert against the patterns
 }
 
+
+# Per-category allow-list for the public GitHub org slug. The slug is
+# permitted in three narrow public-discovery surfaces and rejected
+# everywhere else. The orchestrator clarification (EMB-322, 2026-06-01)
+# unblocks B2 by carving these surfaces out — without them the plugin
+# install URL and clone URL in the README would be uninstallable.
+#
+# A match in a non-allow-listed file still trips the scanner. A match
+# inside one of these files is permitted ONLY when the surrounding
+# context predicate (also defined below) holds. See `_is_allowed_match`.
+PUBLIC_ORG_SLUG_RE = re.compile(r"longshortnmargin", re.IGNORECASE)
+
+# Relative POSIX paths where the public org slug is allowed. Order is
+# significant only for readability — every entry is an exact match.
+PUBLIC_ORG_ALLOWED_PATHS = {
+    ".claude-plugin/marketplace.json",
+    "README.md",
+    "MARKETPLACE.md",
+}
+
 # Dot-prefixed directory names allowed to be skipped during the walk.
 # Anything not on this allow-list — most importantly `.claude/`,
 # `.claude-plugin/`, `.github/` — must be scanned. This is the fix for
@@ -84,73 +104,76 @@ BANNED_PATTERNS: List[BannedPattern] = [
     ),
 
     # --- internal project identifiers -------------------------------------
+    # L1: every internal_project / internal_persona / internal_program
+    # pattern uses re.IGNORECASE so case-variants (`ARGENT`, `shopee`,
+    # `drook`) cannot smuggle the term past the scanner.
     BannedPattern(
         "internal_project",
-        re.compile(r"\bShopee\b"),
+        re.compile(r"\bShopee\b", re.IGNORECASE),
         "Do not name third-party companies; use a generic placeholder.",
     ),
     BannedPattern(
         "internal_project",
-        re.compile(r"\bChatbot\s*Mart\b"),
+        re.compile(r"\bChatbot\s*Mart\b", re.IGNORECASE),
         "Internal mart name. Use a generic example like 'orders-mart'.",
     ),
     BannedPattern(
         "internal_project",
-        re.compile(r"\bDragonRook\b"),
+        re.compile(r"\bDragonRook\b", re.IGNORECASE),
         "Private mono-repo name. Do not reference in public artifacts.",
     ),
     BannedPattern(
         "internal_project",
-        re.compile(r"\bEmberlock(?:_\w+)?\b"),
+        re.compile(r"\bEmberlock(?:_\w+)?\b", re.IGNORECASE),
         "Private archive name. Do not reference.",
     ),
 
     # --- internal agent / persona names -----------------------------------
     BannedPattern(
         "internal_persona",
-        re.compile(r"\bArgent\b"),
+        re.compile(r"\bArgent\b", re.IGNORECASE),
         "Private agent persona. Use generic 'reviewer' or 'maintainer'.",
     ),
     BannedPattern(
         "internal_persona",
-        re.compile(r"\bSilver\s+Chainbind\b"),
+        re.compile(r"\bSilver\s+Chainbind\b", re.IGNORECASE),
         "Private persona name. Do not reference.",
     ),
     BannedPattern(
         "internal_persona",
-        re.compile(r"\bGhost\s+Operator\b"),
+        re.compile(r"\bGhost\s+Operator\b", re.IGNORECASE),
         "Private operator alias. Do not reference.",
     ),
 
     # --- internal program names -------------------------------------------
     BannedPattern(
         "internal_program",
-        re.compile(r"\bDROOK\b"),
+        re.compile(r"\bDROOK\b", re.IGNORECASE),
         "Private orchestration program. Do not reference.",
     ),
     BannedPattern(
         "internal_program",
-        re.compile(r"\bFHAG\b"),
+        re.compile(r"\bFHAG\b", re.IGNORECASE),
         "Private program. Do not reference.",
     ),
     BannedPattern(
         "internal_program",
-        re.compile(r"\bSCAS\b"),
+        re.compile(r"\bSCAS\b", re.IGNORECASE),
         "Private program. Do not reference.",
     ),
     BannedPattern(
         "internal_program",
-        re.compile(r"\bDaPES\b"),
+        re.compile(r"\bDaPES\b", re.IGNORECASE),
         "Private program. Do not reference.",
     ),
     BannedPattern(
         "internal_program",
-        re.compile(r"\bFLQP\b"),
+        re.compile(r"\bFLQP\b", re.IGNORECASE),
         "Private protocol. Do not reference.",
     ),
     BannedPattern(
         "internal_program",
-        re.compile(r"\bCelestial\s+Ordinance\b"),
+        re.compile(r"\bCelestial\s+Ordinance\b", re.IGNORECASE),
         "Private protocol name. Do not reference.",
     ),
     BannedPattern(
@@ -220,7 +243,27 @@ def is_scannable(path: Path) -> bool:
     return path.suffix.lower() in SCAN_EXTENSIONS
 
 
-def scan_file(filepath: Path) -> List[Violation]:
+def _is_public_org_allowed(rel_path: str, line: str) -> bool:
+    """Return True when a `longshortnmargin` match in this file+line is
+    permitted by the public-discovery allow-list.
+
+    The orchestrator's spec clarification (EMB-322 comment, 2026-06-01)
+    permits the public org slug in three narrow surfaces:
+
+    - ``.claude-plugin/marketplace.json`` — the manifest ``owner.name``.
+    - ``README.md`` — install / clone commands.
+    - ``MARKETPLACE.md`` — submission instructions.
+
+    Outside these files, the slug is banned. Inside these files, the
+    slug is allowed regardless of line content; the relative-path gate
+    is sufficient because the files themselves are public-install
+    surfaces and there is no other plausible reason for the slug to
+    appear in them.
+    """
+    return rel_path in PUBLIC_ORG_ALLOWED_PATHS
+
+
+def scan_file(filepath: Path, rel_path: str = "") -> List[Violation]:
     violations: List[Violation] = []
     try:
         text = filepath.read_text(encoding="utf-8", errors="replace")
@@ -230,21 +273,33 @@ def scan_file(filepath: Path) -> List[Violation]:
     for line_no, line in enumerate(text.splitlines(), start=1):
         for bp in BANNED_PATTERNS:
             match = bp.pattern.search(line)
-            if match:
-                violations.append(
-                    Violation(
-                        filepath=str(filepath),
-                        line_number=line_no,
-                        column=match.start() + 1,
-                        category=bp.category,
-                        matched=match.group(),
-                        remediation=bp.remediation,
-                    )
+            if not match:
+                continue
+            # Apply the public-org allow-list: a match against the
+            # public-org slug pattern in one of the install-surface
+            # files is permitted (and only that pattern, in those
+            # files — every other pattern still trips the scanner).
+            if (
+                bp.category == "user_id"
+                and PUBLIC_ORG_SLUG_RE.fullmatch(match.group())
+                and _is_public_org_allowed(rel_path, line)
+            ):
+                continue
+            violations.append(
+                Violation(
+                    filepath=str(filepath),
+                    line_number=line_no,
+                    column=match.start() + 1,
+                    category=bp.category,
+                    matched=match.group(),
+                    remediation=bp.remediation,
                 )
+            )
     return violations
 
 
-def iter_files(root: Path) -> Iterable[Path]:
+def iter_files(root: Path) -> Iterable[Tuple[Path, str]]:
+    """Yield (absolute_path, relative_posix_path) for every scannable file."""
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
 
@@ -265,14 +320,14 @@ def iter_files(root: Path) -> Iterable[Path]:
                 continue
             if not is_scannable(filepath):
                 continue
-            yield filepath
+            yield filepath, rel_path
 
 
 def scan_directory(root: str) -> List[Violation]:
     all_violations: List[Violation] = []
     root_path = Path(root).resolve()
-    for filepath in iter_files(root_path):
-        all_violations.extend(scan_file(filepath))
+    for filepath, rel_path in iter_files(root_path):
+        all_violations.extend(scan_file(filepath, rel_path=rel_path))
     return all_violations
 
 

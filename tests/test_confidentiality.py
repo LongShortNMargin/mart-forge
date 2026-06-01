@@ -218,3 +218,83 @@ class TestAdversarial:
         _write(tmp_path, "a.bin", "Shopee\n")
         violations = scan_directory(str(tmp_path))
         assert violations == []
+
+    def test_lowercase_internal_persona_caught(self, tmp_path: Path) -> None:
+        # L1: every internal_persona / internal_program pattern is now
+        # case-insensitive. `argent` and `ARGENT` are caught the same
+        # way `Argent` was before.
+        for variant in ("argent", "ARGENT", "Argent"):
+            _write(tmp_path, "a.md", f"reviewer is {variant}\n")
+            violations = scan_file(tmp_path / "a.md")
+            assert any(
+                v.category == "internal_persona" for v in violations
+            ), f"L1 regression: {variant!r} not caught"
+
+    def test_lowercase_internal_program_caught(self, tmp_path: Path) -> None:
+        for variant in ("drook", "DROOK", "fhag", "FHAG"):
+            _write(tmp_path, "a.md", f"system: {variant}\n")
+            violations = scan_file(tmp_path / "a.md")
+            assert any(
+                v.category == "internal_program" for v in violations
+            ), f"L1 regression: {variant!r} not caught"
+
+
+class TestPublicOrgAllowList:
+    """B2: the public GitHub org slug `LongShortNMargin` is allowed
+    in three narrow install-surface files. Everywhere else, the slug
+    still trips the scanner. The orchestrator spec clarification
+    (EMB-322, 2026-06-01) governs this carve-out.
+    """
+
+    def test_slug_allowed_in_marketplace_json(self, tmp_path: Path) -> None:
+        cp_dir = tmp_path / ".claude-plugin"
+        cp_dir.mkdir()
+        (cp_dir / "marketplace.json").write_text(
+            '{"owner": {"name": "LongShortNMargin"}}\n', encoding="utf-8"
+        )
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_slug_allowed_in_readme(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "README.md",
+            "Install via /plugin marketplace add LongShortNMargin/mart-forge\n",
+        )
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_slug_allowed_in_marketplace_md(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "MARKETPLACE.md",
+            "Add LongShortNMargin/mart-forge to the community directory.\n",
+        )
+        assert scan_directory(str(tmp_path)) == []
+
+    def test_slug_blocked_in_a_random_skill_body(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / "skills" / "lifecycle" / "demo"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: demo\n---\nrun git clone https://github.com/LongShortNMargin/x\n",
+            encoding="utf-8",
+        )
+        violations = scan_directory(str(tmp_path))
+        assert violations, "B2 regression: slug must still trip outside install surfaces"
+        assert any(v.category == "user_id" for v in violations)
+
+    def test_slug_blocked_in_docs(self, tmp_path: Path) -> None:
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "notes.md").write_text(
+            "Reference: LongShortNMargin internal handle\n", encoding="utf-8"
+        )
+        violations = scan_directory(str(tmp_path))
+        assert any(v.category == "user_id" for v in violations)
+
+    def test_other_banned_strings_in_allowed_path_still_caught(
+        self, tmp_path: Path
+    ) -> None:
+        # The allow-list only forgives the public-org slug. A different
+        # banned string in README.md must still fail.
+        _write(tmp_path, "README.md", "internal: DROOK\n")
+        violations = scan_directory(str(tmp_path))
+        assert any(v.category == "internal_program" for v in violations)

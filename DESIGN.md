@@ -167,6 +167,18 @@ and checks every skill path resolves to a directory containing a valid
 `SKILL.md`. The pytest suite asserts the manifest declares exactly
 four plugins and the skill count matches the on-disk tree.
 
+`scripts/sync_local_skills.py --check` (also wired into CI) detects
+drift between the manifest and the `.claude/skills/` mirror: a missing
+symlink, an unexpected entry, a real directory where a symlink belongs,
+or a symlink pointing at the wrong target all exit 1. This prevents the
+two surfaces from diverging if a PR edits `marketplace.json` without
+re-running the sync helper.
+
+`sync_local_skills.py` refuses to delete a non-symlink directory under
+`.claude/skills/<name>/` unless `--force` is passed; the warning prints
+the path being clobbered. This protects users on Windows or zip-
+extracted clones who may have authored real content there.
+
 ## 11. Custom error messages include remediation
 
 When a linter fails, the error message names the file, the location,

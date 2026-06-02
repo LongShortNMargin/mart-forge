@@ -4,10 +4,14 @@ mart_name: gme-options-mart
 prefix: gme
 
 # Phase tracking — updated by skills as they run.
-# Round-2 + item-A iteration: Phase A.5 reviewer approved (comment
-# 751fbe78) once the T2.1/T2.3 phrasing patch landed and the BRD was
-# signed. Now advancing to Phase B (TDD draft) in this dispatch.
-phase: A_signed
+# Phase B drafted in this dispatch (Phase A.5 approved at 751fbe78,
+# BRD signed at commit 6e777a0). TDD addresses reviewer items B-E:
+# T3.4 epsilon = 1% of abs(dealer_net_gamma) (B); gex_zero_cross
+# tie-break = nearest spot, lower strike on tie (C); T1.6b near-zero
+# denominator floor at 1e6 USD (D); iv_rank link_status_active
+# lifecycle owned by Phase D /mart-dqc with deterministic SQL formula
+# at the ADS layer (E). Awaiting Phase B.5 review before scaffold.
+phase: B_draft
 
 # Artifact paths (relative to this mart root, i.e. examples/gme-options-mart/).
 source_catalog_path: docs/source_catalog.json

@@ -4,26 +4,31 @@ mart_name: gme-options-mart
 prefix: gme
 
 # Phase tracking — updated by skills as they run.
-# Phase D /mart-dqc audit complete per orchestrator directive
-# `Phase C closed clean. Dispatching Phase D` (member comment dated
-# 2026-06-02T04:35Z). 8-control DQC audit on the signed C scaffold
-# (commit dfa31b6): 35 / 36 controls pass, 1 not_applicable (T1.6b
-# parametric rate-sensitivity — covered by CI-side Python test, not
-# expressible as a single dbt assertion; documented in business-
-# requirements.md §B-4 Phase D outcome + tracked under TDD T-21 / TL-2).
-# 10 new singular tests + 1 schema.yml relationships entry added to
-# close the 8-control gaps that existed at C_signed (PK compound
-# uniqueness on ODS chain, DWD chain duplicate detection, freshness on
-# chain + price + ADS, volume on chain, accepted_range on OI + IV, FK
-# on expiry_date_sk, iv_rank lifecycle predicate). All 57 dbt tests
-# (47 original + 9 new singular + 1 new schema.yml relationships)
-# pass against the local DuckDB fixture target. Phase E dashboard
-# (already scaffolded in Phase C) and Phase F TEST PLAN execution are
-# the next dispatches.
-phase: D_dqc_complete
+# Phase F kin-scope: TEST PLAN execution for Tiers 1.6 / 1.6b / 1.7 / 1.8
+# and 2 through 8 per orchestrator directive `Phase F dispatch — split
+# work` (member comment 2026-06-02T04:55Z, refreshed at 08:33Z). The
+# kin's tool surface does NOT include Claude-in-Chrome MCP, so the
+# Tier 1.1-1.5 external-comparator fetches are delegated to the
+# orchestrator and will be filled in a follow-up commit. Three new
+# Python tests landed in this revision: tests/test_net_gex_recompute.py
+# (TC-13, Tier 1.6, ±1%), tests/test_net_gex_rate_sensitivity.py
+# (TC-14, Tier 1.6b parametric at r ∈ {0.03, 0.045, 0.06}, ≤ 5% relative
+# spread with the $1e6 item-D floor), and
+# tests/test_gex_zero_cross_strike_recompute.py (TC-15, Tier 1.7,
+# ±$0.50). All three pass on both local-DuckDB and live MotherDuck
+# targets. CI workflow (.github/workflows/gme-mart-ci.yml) gains a
+# pytest step and a headless-Streamlit smoke step + drops dbt's target/
+# artefact before the confidentiality scan so build-time absolute
+# paths in dbt-rendered SQL do not trip the scanner. test-results.md
+# records the kin-scoped TIER 2-8 PASS state with the dashboard value
+# snapshot the orchestrator will compare against. Phase advances to
+# F_kin_scope_complete; waiting on orchestrator Tier 1.1-1.5 evidence
+# before Phase F.5 reviewer pass + final PR open.
+phase: F_kin_scope_complete
 scaffold_generated_at: 2026-06-02T03:50:00Z
 c_signed_at: 2026-06-02T04:35:00Z
 d_complete_at: 2026-06-02T04:45:00Z
+f_kin_scope_complete_at: 2026-06-02T08:50:00Z
 
 # Artifact paths (relative to this mart root, i.e. examples/gme-options-mart/).
 source_catalog_path: docs/source_catalog.json

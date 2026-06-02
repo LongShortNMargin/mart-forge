@@ -97,12 +97,12 @@ check against `gme_dwd_options_chain_greeks` would miss.
 
 | ID | Metric | Sweep | Tolerance | Result |
 |---|---|---|---|---|
-| T1.6b | net_gex | `tests/test_net_gex_rate_sensitivity.py` | spread / max(\|producer\|, $1e6) ≤ 5% | **PASS** |
+| T1.6b | net_gex | `tests/test_net_gex_rate_sensitivity.py` | spread / max(\|producer\|, $1e6) ≤ 1% (per TEST PLAN T1.6b + BRD §B-4 L-4) | **PASS** |
 
 Re-runs the Python BS pipeline at `r ∈ {0.03, 0.045, 0.06}` over the
 same ODS rowset. The per-trading_date spread `max(net_gex_r) − min`
 divided by `max(abs(producer), 1e6 USD)` (item D denominator floor)
-stays well within the 5% band — gamma is approximately r-insensitive
+stays well within the 1% band — gamma is approximately r-insensitive
 at short-dated maturities, which is exactly the BRD §B-4 L-4 claim
 this test validates.
 

@@ -4,8 +4,8 @@ Sweeps `r ∈ {0.03, 0.045, 0.06}` over the same ODS rowset and recomputes
 net_gex three times. Asserts the rate-insensitivity claim in BRD §B-4
 L-4: the per-trading_date spread `max(net_gex_r) − min(net_gex_r)`
 divided by `max(abs(producer_net_gex), 1e6 USD)` (item D denominator
-floor) stays within 5% — well inside the ±1% pricing tolerance band
-because gamma is approximately r-insensitive at short-dated maturities.
+floor) stays within 1% (TEST PLAN T1.6b tolerance band) because gamma
+is approximately r-insensitive at short-dated maturities.
 
 This is the dbt-side NA in the Phase D scorecard
 (`business_recon_t1_6b_rate_floor`): a single dbt test cannot sweep a
@@ -20,7 +20,7 @@ import pandas as pd
 
 
 RATES = (0.03, 0.045, 0.06)
-SPREAD_TOLERANCE = 0.05      # 5% of denominator
+SPREAD_TOLERANCE = 0.01      # 1% of denominator (TEST PLAN T1.6b + BRD §B-4 L-4)
 ABSOLUTE_FLOOR_USD = 1.0e6   # item D denominator floor
 
 

@@ -1,8 +1,8 @@
 # Business Requirements Document: gme-options-mart
 
-> **Date:** 2026-06-01
+> **Date:** 2026-06-02
 > **Author:** mart-forge example author
-> **Status:** Draft (round 2 — addresses reviewer findings 1-12 in comment `8bd7a35c`)
+> **Status:** Signed (round 2 + item A — addresses reviewer findings 1-12 in comment `8bd7a35c` and item-A language patch in comment `751fbe78`)
 
 ---
 
@@ -12,6 +12,7 @@
 |---------|------------|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0.1     | 2026-06-01 | mart-forge example author    | Initial draft from `docs/source_catalog.json`.                                                                                                                                                                                                                                          |
 | 0.2     | 2026-06-01 | mart-forge example author    | Round-2 revision addressing reviewer findings 1-12: single locked GEX sign convention; dealer_net_gamma scope-distinct (front-month-only) from net_gex (full-chain); gex_zero_cross_strike renamed; iv30 interpolation pinned to total variance; iv_rank link_status phase-gated; freshness threshold aligned; minor language fixes. |
+| 0.3     | 2026-06-02 | mart-forge example author    | Round-2 item A patch (reviewer comment `751fbe78`): rephrase L-7 + TEST PLAN §Tier 2 as a single inequality on `last_pull_ts_utc - most_recent_session_close` to remove "pull_age" / "age vs lag" linguistic ambiguity; sign the BRD. |
 
 ---
 
@@ -157,7 +158,7 @@ follows the same rule (closes reviewer finding 6).
 | L-4  | Risk-free rate is hard-coded at 0.045 (4.5%) for Black-Scholes greek recomputation.                                  | Greek values can shift with the chosen rate; T1.6 alone (same-r parity) cannot catch a silent rate change in the producer. | T1.6b parametric sensitivity test recomputes net_gex at r ∈ {0.03, 0.045, 0.06} and asserts `(max - min) / |producer_value| <= 1%`. Fred 3M T-bill ingest queued as Phase D follow-up (closes reviewer finding 4). |
 | L-5  | Pull cadence is end-of-day only; intraday GEX shifts are not captured.                                              | Mart cannot answer intraday questions.                          | Out of scope for this example; documented explicitly in §B-2 Purpose.                                                                                       |
 | L-6  | Spot comparator must be aligned to the **same trading_date** the mart used (Yahoo's "Previous Close" header drifts by one trading day during market hours). | Tier-1 T1.1 would fail every intraday execution if compared to "Previous Close". | T1.1 compares against the Yahoo v8 chart endpoint OHLC bar for the trading_date in question, not the quote header (closes reviewer finding 9).                                                                |
-| L-7  | Freshness threshold must be a single number; T2.1/T2.3 must not disagree.                                            | Prior iteration allowed a pull that satisfied T2.1 to also trigger T2.3 STALE banner (96h vs 72h gap). | T2.1 and T2.3 both use `pull_age <= 26h since most_recent_session_close` (closes reviewer finding 7).                                                                                                            |
+| L-7  | Freshness gate must be expressed as one inequality on one quantity so producer + validator cannot disagree on what "pull age" means. | Prior round-1 iteration allowed a pull that satisfied T2.1 to also trigger T2.3 STALE banner. Round-2 wording ("`pull_age <= 26h since most_recent_session_close`") was still linguistically ambiguous (reading X "age since now" vs reading Y "lag behind close" produce opposite behaviors). | T2.1 / T2.2 / T2.3 evaluate the **same** inequality on the **same** quantity: `last_pull_ts_utc - most_recent_session_close <= 26h` AND `last_pull_ts_utc >= most_recent_session_close`. STALE banner renders iff that inequality is false. Dashboard banner shows signed `pull_lag_hours = (last_pull_ts_utc - most_recent_session_close) / 1h`. Closes reviewer finding 7 and reviewer round-2 item A (comment `751fbe78`).                                                            |
 
 ### Unsupported Metrics
 
@@ -177,7 +178,15 @@ follows the same rule (closes reviewer finding 6).
 
 ## Signature
 
-| Role | Name | Date | Signature |
-|------|------|------|-----------|
-| Stakeholder | ________________ | __________ | __________ |
-| Data Engineer | ________________ | __________ | __________ |
+Phase A.5 review verdict on round-2 + item-A patch: **approve**
+(reviewer comment `751fbe78`, "the patch is mechanical (6 lines across
+two files) and the intent is clear from this comment … If you patch A
+in the same revision as flipping `brd_signed: true`, I do not need
+another round of review on Phase A"). The four blockers and all five
+majors are closed; remaining items B–E are scoped to Phase B TDD / Phase F
+test code, not BRD blockers.
+
+| Role          | Name                       | Date       | Signature                                         |
+|---------------|----------------------------|------------|---------------------------------------------------|
+| Stakeholder   | mart-forge example author  | 2026-06-02 | signed-off per reviewer approval `751fbe78`       |
+| Data Engineer | mart-forge example author  | 2026-06-02 | signed-off per reviewer approval `751fbe78`       |

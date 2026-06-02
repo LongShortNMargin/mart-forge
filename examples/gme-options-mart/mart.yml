@@ -4,10 +4,10 @@ mart_name: gme-options-mart
 prefix: gme
 
 # Phase tracking — updated by skills as they run.
-# Round-2 iteration: artifacts redrafted after Phase A.5 reviewer
-# verdict (comment 8bd7a35c, findings 1-12). Awaiting A.5 re-review
-# before advancing to Phase B.
-phase: A_draft
+# Round-2 + item-A iteration: Phase A.5 reviewer approved (comment
+# 751fbe78) once the T2.1/T2.3 phrasing patch landed and the BRD was
+# signed. Now advancing to Phase B (TDD draft) in this dispatch.
+phase: A_signed
 
 # Artifact paths (relative to this mart root, i.e. examples/gme-options-mart/).
 source_catalog_path: docs/source_catalog.json
@@ -15,7 +15,7 @@ brd_path: docs/business-requirements.md
 tdd_path: docs/tech-design-doc.md
 
 # Sign-off flags.
-brd_signed: false
+brd_signed: true
 tdd_signed: false
 
 # Issue tracker binding (used by /linear if invoked from this mart).

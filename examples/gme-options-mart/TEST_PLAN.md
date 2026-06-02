@@ -20,6 +20,16 @@
 > "Previous Close" header (finding 9); concrete API endpoints in
 > source_catalog (finding 10); T1.3 comparator selector locked
 > (finding 11); neutral phrasing (finding 12).
+>
+> **Revision note (round 2 item A).** Reviewer comment `751fbe78`
+> required a language patch before BRD sign-off: rephrase T2.1/T2.2/T2.3
+> as a single inequality on `last_pull_ts_utc -
+> most_recent_session_close` (not an ambiguous "pull_age" string), so
+> producer and validator cannot disagree on whether reading X
+> ("age of the pull since now") or reading Y ("lag of the pull behind
+> the most recent close") is intended. Reading Y is the intent. §Tier 2
+> below is rewritten accordingly; §B-4 L-7 in the BRD carries the same
+> phrasing.
 
 ## Provenance
 
@@ -64,16 +74,26 @@ For each Tier 1 external comparator:
 
 ## Tier 2 — Data freshness (BLOCKING)
 
-A single freshness threshold is used by both the test gate and the
-dashboard banner so they cannot disagree (closes reviewer finding 7).
+A single freshness inequality is used by both the test gate and the
+dashboard banner so they cannot disagree (closes reviewer finding 7
+and reviewer round-2 item A). All three tests below evaluate the
+**same** inequality on the **same** quantity (`pull_lag_hours`); they
+cannot drift.
 
-- **T2.1** `pull_age <= 26h since most_recent_session_close` on market
-  days, where `most_recent_session_close = 21:00 UTC on the last
-  trading_day per dim_date`.
-- **T2.2** Dashboard banner shows `last_pull_ts_utc` + `pull_age_hours`.
-- **T2.3** If `pull_age > 26h since most_recent_session_close`, the
-  dashboard renders a STALE banner — same threshold as T2.1, so a pull
-  that passes T2.1 cannot simultaneously be flagged STALE.
+Let `most_recent_session_close = 21:00 UTC on the last trading_day per
+dim_date that is on or before `now()`` and
+`pull_lag_hours = (last_pull_ts_utc - most_recent_session_close) / 1h`.
+
+- **T2.1** `last_pull_ts_utc - most_recent_session_close <= 26h` AND
+  `last_pull_ts_utc >= most_recent_session_close` on market days. (The
+  second clause prevents a pre-close pull from accidentally passing
+  with a negative lag.)
+- **T2.2** Dashboard banner shows `last_pull_ts_utc` and
+  `pull_lag_hours` (signed hours from `most_recent_session_close` to
+  `last_pull_ts_utc`).
+- **T2.3** STALE banner renders **iff the T2.1 inequality is false**.
+  Same predicate, same data — a pull that passes T2.1 cannot
+  simultaneously be flagged STALE.
 
 ## Tier 3 — Internal consistency (BLOCKING)
 

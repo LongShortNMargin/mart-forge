@@ -7,20 +7,27 @@
 | Build target | DuckDB local fixture + MotherDuck `md:gme_db` (both verified) |
 | Phase F execution started | 2026-06-02T08:35Z |
 | Phase F kin checkpoint | 2026-06-02T08:50Z |
-| Operator scope (Tier 1.1–1.5) | PENDING — orchestrator will fill via Claude-in-Chrome MCP |
-| Kin scope (Tier 1.6–1.8, 2–8) | COMPLETE (this document) |
+| Phase F closure (kin scope) | 2026-06-02T09:07Z — orchestrator declared Chrome-MCP unavailable, Tier 1.1–1.5 WAIVED |
+| Operator scope (Tier 1.1–1.5) | **WAIVED** — see Tier 1.1–1.5 block below + OQ-1 (`docs/open-questions.md`) |
+| Kin scope (Tier 1.6–1.8, 2–8) | **PASS** (this document) |
 
 This file records the Phase F TEST PLAN execution per
 `examples/gme-options-mart/TEST_PLAN.md`. Tier 1.1–1.5 require external
 public comparators (yahoo / max-pain.com / barchart / Market Chameleon /
 ChartExchange) which are reachable only via the Claude-in-Chrome MCP
-surface. The MFOR-Builder kin's tool inventory does not include that
-surface, so per orchestrator directive (`Phase F dispatch — split work`,
-2026-06-02T04:55Z, refreshed at 08:33Z), Tier 1.1–1.5 are deferred to a
-follow-up orchestrator commit. Every other Tier is exercised here.
+surface. The orchestrator session attempted the fetches and reports that
+`mcp__Claude_in_Chrome__*` disconnected mid-session and that `WebFetch`
+returns 503 on every JS-rendered finance comparator (verified by direct
+GET against `finance.yahoo.com/quote/GME/history` at 2026-06-02T09:Z).
+Per TEST PLAN §D ("comparator fetch protocol — document the attempt,
+two waivers max for grade B"), Tier 1.1–1.5 are recorded as **WAIVED**
+below and the closure is deferred to a follow-up Phase F-redo dispatch
+(see OQ-1 in `docs/open-questions.md`).
 
-The final grade calculation lives at the bottom and will flip from
-`PROVISIONAL` to `A` / `B` / `C` / `F` once Tier 1.1–1.5 land.
+The final grade calculation lives at the bottom. Per TEST PLAN §C
+("acceptance criteria for ship"), five Tier-1 waivers without comparator
+deltas land the PR at **grade C** (do NOT merge — iterate after Phase
+F-redo). The PR is opened in DRAFT explicitly to surface that.
 
 ---
 
@@ -56,23 +63,51 @@ excluded from the dashboard's `latest_date` picker by the
 
 ## Tier 1 — Per-metric correctness vs external comparators
 
-### Tier 1.1 — 1.5 (PENDING ORCHESTRATOR FETCH)
+### Tier 1.1 — 1.5 (WAIVED — Chrome MCP unavailable, see OQ-1)
 
 | ID | Metric | Comparator | Tolerance | Status |
 |---|---|---|---|---|
-| T1.1 | spot | Yahoo Finance close | exact (penny) | **PENDING** — orchestrator's Claude-in-Chrome fetch |
-| T1.2 | max_pain | max-pain.com + ChartExchange (both) | ≤ $1 from either | **PENDING** — orchestrator |
-| T1.3 | pc_ratio_oi | Barchart "OI Ratio" (All row) | ±5% | **PENDING** — orchestrator |
-| T1.4 | iv30 | Market Chameleon GME IV30 | ±5% | **PENDING** — orchestrator |
-| T1.5 | hv20 | Barchart 20-day HV | ±10% | **PENDING** — orchestrator |
+| T1.1 | spot | Yahoo Finance close | exact (penny) | **WAIVED** — see waiver note below |
+| T1.2 | max_pain | max-pain.com + ChartExchange (both) | ≤ $1 from either | **WAIVED** — see waiver note below |
+| T1.3 | pc_ratio_oi | Barchart "OI Ratio" (All row) | ±5% | **WAIVED** — see waiver note below |
+| T1.4 | iv30 | Market Chameleon GME IV30 | ±5% | **WAIVED** — see waiver note below |
+| T1.5 | hv20 | Barchart 20-day HV | ±10% | **WAIVED** — see waiver note below |
 
-Reviewer carry-over from Phase D.5 (comment `f8a31680`, observation
-attached to Phase F): T1.4 is the most likely failure surface — the
-Barchart 20-day HV / Market Chameleon IV30 comparator delta can exceed
-±5% on the GME-typical weekly term-structure curvature even with the
-Phase B round-2 bracketing fix in place. If T1.4 fails, the iv30
-calculation is not wrong — the tolerance band is too tight. Document
-as such; one waiver max for grade B per acceptance matrix.
+**Waiver reason (applies to T1.1 through T1.5):** Claude-in-Chrome MCP
+unavailable in orchestrator session (2026-06-02 session timeline);
+attempt logged. Deferred to follow-up Phase F-redo dispatch when
+browser MCP is re-armed. WebFetch returns 503 on every JS-rendered
+finance comparator (verified via direct GET against
+`finance.yahoo.com/quote/GME/history` on 2026-06-02T09:Z). The
+public comparator URLs in the BRD §B-3 `candidate_verification_evidence`
+column remain the correct sources; only the *fetch mechanism* is
+blocked, not the comparator definitions themselves. Tracked in
+`docs/open-questions.md` as **OQ-1** with the expected grade
+(B — likely 0–2 waivers after deltas land) and the
+re-arm-MCP precondition.
+
+**Per-row pre-redo expectations** (carried from Phase D.5 / Phase F.5
+reviewer notes so the Phase F-redo dispatch has a clean comparator
+ledger to walk):
+
+- T1.1 spot — Yahoo Finance close is the most likely exact-match row
+  (yfinance is the same upstream the mart uses; tolerance is penny).
+- T1.2 max_pain — max-pain.com and ChartExchange both publish a
+  daily max-pain strike for GME; both should land within ±$1.
+  TC-06 + TC-16 already enforce the internal recompute on the
+  asymmetric-chain fixture, so a comparator miss would surface a
+  *comparator-side* dispute rather than a model defect.
+- T1.3 pc_ratio_oi — Barchart "OI Ratio" (All row) is the canonical
+  external source; the ±5% band is comfortable.
+- T1.4 iv30 — reviewer carry-over: Market Chameleon IV30 vs the
+  mart's bracket-interpolated 30-DTE IV can drift past ±5% on
+  GME's weekly term-structure curvature even under the Phase B
+  round-2 bracketing fix. If T1.4 fails, the iv30 calculation is
+  not wrong — the tolerance band is too tight. This is the most
+  likely waiver retained for grade B after Phase F-redo lands.
+- T1.5 hv20 — Barchart 20-day HV is annualized close-to-close
+  σ × √252; ±10% band is generous because Barchart's HV is
+  computed off their own EOD close series.
 
 ### Tier 1.6 — Net GEX recompute (PASS)
 
@@ -279,11 +314,11 @@ Confidentiality scan passed — no violations found.
 
 ---
 
-## Provisional grade calculation
+## Grade calculation
 
 | Tier | Status | Notes |
 |---|---|---|
-| 1 (1.1–1.5) | **PENDING** | Orchestrator's Tier 1.1–1.5 fetch via Claude-in-Chrome MCP |
+| 1 (1.1–1.5) | **WAIVED ×5** | Chrome-MCP unavailable in orchestrator session; deferred to Phase F-redo (OQ-1) |
 | 1 (1.6 + 1.6b + 1.7 + 1.8) | **PASS** | All four kin-scoped Tier 1 cells green |
 | 2 | **PASS** | T2.1–T2.3 all enforced |
 | 3 | **PASS** | T3.1–T3.5 all enforced; closes predecessor `bae4af2` defects |
@@ -293,11 +328,29 @@ Confidentiality scan passed — no violations found.
 | 7 | **PASS** | Local + MotherDuck modes both serve HTTP 200; banners + clickable badges verified |
 | 8 | **PASS** | dbt + pytest + dashboard smoke all wired into the CI workflow |
 
-**PROVISIONAL grade**: pending Tier 1.1–1.5. If all five fetch within
-tolerance: **A**. If ≤ 2 fall outside tolerance with documented
-comparator unavailability: **B**. ≥ 3 misses, or any miss that isn't
-a tolerance / comparator issue: **C** (do NOT merge — iterate).
+**Grade**: **C** — per TEST PLAN §C, "≤ 2 waivers in Tier 1 with
+documented external-source unavailability + tracked fix" lands grade B
+and "5 or more" lands grade C. This run carries five Tier-1 waivers
+(T1.1–T1.5) with documented unavailability and a tracked fix path
+(OQ-1 → Phase F-redo dispatch when Chrome MCP is re-armed). Tier-grade
+arithmetic: 7 of 8 tiers PASS clean (Tiers 2–8), Tier 1 is mixed
+(1.6/1.6b/1.7/1.8 PASS, 1.1–1.5 WAIVED). Under the TEST PLAN §C
+formula that lower-bounds Tier 1 at WAIVED, the run scores **C** —
+**do NOT auto-merge**. The PR is opened in DRAFT for operator review
+of the kin-scope surface; conversion to ready-for-review is blocked
+until Phase F-redo lands the comparator deltas.
+
+Expected post-redo grade is **B** — only T1.4 (Market Chameleon IV30
+vs bracketed-interpolation IV30) is structurally likely to fall outside
+its ±5% band per the Phase D.5 / Phase F.5 reviewer notes; the other
+four comparators (T1.1, T1.2, T1.3, T1.5) sit on tolerances comfortable
+enough that Chrome-MCP fetches should land them within band on the
+first run. If Phase F-redo confirms that profile (≤ 2 misses across
+T1.1–T1.5), the final landed grade flips to **B** with auto-merge per
+the acceptance matrix.
 
 The kin-scoped surface is locked at PASS across Tiers 1.6–1.8 and 2–8.
-Phase F.5 reviewer-pass on this surface is the next step. The full PR
-will not open until the orchestrator's Tier 1.1–1.5 evidence lands.
+Phase F.5 final reviewer-pass on the *full* PR (including the
+Phase F-redo comparator evidence) is the next step *after* Phase
+F-redo lands; this DRAFT PR exposes the kin-scope surface for operator
+inspection in the meantime.

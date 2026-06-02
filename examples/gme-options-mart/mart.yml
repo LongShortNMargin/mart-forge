@@ -8,27 +8,39 @@ prefix: gme
 # and 2 through 8 per orchestrator directive `Phase F dispatch — split
 # work` (member comment 2026-06-02T04:55Z, refreshed at 08:33Z). The
 # kin's tool surface does NOT include Claude-in-Chrome MCP, so the
-# Tier 1.1-1.5 external-comparator fetches are delegated to the
-# orchestrator and will be filled in a follow-up commit. Three new
-# Python tests landed in this revision: tests/test_net_gex_recompute.py
-# (TC-13, Tier 1.6, ±1%), tests/test_net_gex_rate_sensitivity.py
-# (TC-14, Tier 1.6b parametric at r ∈ {0.03, 0.045, 0.06}, ≤ 5% relative
-# spread with the $1e6 item-D floor), and
-# tests/test_gex_zero_cross_strike_recompute.py (TC-15, Tier 1.7,
-# ±$0.50). All three pass on both local-DuckDB and live MotherDuck
-# targets. CI workflow (.github/workflows/gme-mart-ci.yml) gains a
-# pytest step and a headless-Streamlit smoke step + drops dbt's target/
-# artefact before the confidentiality scan so build-time absolute
-# paths in dbt-rendered SQL do not trip the scanner. test-results.md
-# records the kin-scoped TIER 2-8 PASS state with the dashboard value
-# snapshot the orchestrator will compare against. Phase advances to
-# F_kin_scope_complete; waiting on orchestrator Tier 1.1-1.5 evidence
-# before Phase F.5 reviewer pass + final PR open.
-phase: F_kin_scope_complete
+# Tier 1.1-1.5 external-comparator fetches were delegated to the
+# orchestrator. Phase F.5 round-2 closure (commit 2277aa4) tightened
+# TC-14 SPREAD_TOLERANCE from 5% to 1% per BRD §B-4 L-4. After that,
+# the orchestrator session of 2026-06-02 attempted Tier 1.1-1.5
+# fetches and reported that mcp__Claude_in_Chrome__* disconnected and
+# WebFetch returns 503 on every JS-rendered finance comparator
+# (verified against finance.yahoo.com/quote/GME/history on
+# 2026-06-02T09:Z). Per orchestrator final directive 2026-06-02T09:07Z,
+# Tier 1.1-1.5 are WAIVED with the unavailability documented; OQ-1
+# in docs/open-questions.md tracks the Phase F-redo dispatch that
+# will fetch the comparator deltas when Chrome MCP is re-armed.
+# Three Python tests live in tests/: test_net_gex_recompute.py
+# (TC-13, Tier 1.6, ±1%), test_net_gex_rate_sensitivity.py
+# (TC-14, Tier 1.6b parametric at r ∈ {0.03, 0.045, 0.06}, ≤ 1%
+# relative spread with the $1e6 item-D floor — tightened to contract
+# in commit 2277aa4), and test_gex_zero_cross_strike_recompute.py
+# (TC-15, Tier 1.7, ±$0.50). All three pass on both local-DuckDB
+# and live MotherDuck targets. CI workflow
+# (.github/workflows/gme-mart-ci.yml) carries a pytest step and a
+# headless-Streamlit smoke step + drops dbt's target/ artefact before
+# the confidentiality scan so build-time absolute paths in
+# dbt-rendered SQL do not trip the scanner. test-results.md records
+# the landed grade C state under TEST PLAN §C (5 Tier-1 waivers with
+# documented unavailability + tracked fix in OQ-1). Phase advances
+# to F_partial_pending_chrome; DRAFT PR is opened for operator
+# visibility; ready-for-review conversion blocked until Phase F-redo
+# lands the comparator deltas.
+phase: F_partial_pending_chrome
 scaffold_generated_at: 2026-06-02T03:50:00Z
 c_signed_at: 2026-06-02T04:35:00Z
 d_complete_at: 2026-06-02T04:45:00Z
 f_kin_scope_complete_at: 2026-06-02T08:50:00Z
+f_partial_pending_chrome_at: 2026-06-02T09:10:00Z
 
 # Artifact paths (relative to this mart root, i.e. examples/gme-options-mart/).
 source_catalog_path: docs/source_catalog.json

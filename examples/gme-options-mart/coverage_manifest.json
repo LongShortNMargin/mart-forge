@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "mart": "gme-options-mart",
+  "metrics": [
+    {"metric": "spot", "link_status": "exact", "comparator": "https://finance.yahoo.com/quote/GME/history"},
+    {"metric": "max_pain_strike_front", "link_status": "exact", "comparator": "https://max-pain.com/stocks/GME"},
+    {"metric": "pc_ratio_oi", "link_status": "exact", "comparator": "https://barchart.com/stocks/quotes/GME/put-call-ratios"},
+    {"metric": "iv30", "link_status": "proxy", "comparator": "https://marketchameleon.com/Overview/GME/"},
+    {"metric": "hv20", "link_status": "exact", "comparator": "https://barchart.com/stocks/quotes/GME/price-history/historical"},
+    {"metric": "net_gex", "link_status": "unsupported", "comparator": null},
+    {"metric": "gex_zero_cross_strike", "link_status": "unsupported", "comparator": null},
+    {"metric": "dealer_net_gamma", "link_status": "unsupported", "comparator": null},
+    {"metric": "iv_rank", "link_status": "phase-gated", "comparator": "https://marketchameleon.com/Overview/GME/IV/"}
+  ],
+  "planned_count": 9,
+  "verified_count": 0,
+  "_note": "Phase F tier-1 comparator verification will populate verified_count via Claude-in-Chrome MCP."
+}

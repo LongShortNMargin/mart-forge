@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "mart": "gme-options-mart",
+  "phase": "C_complete",
+  "generated_at": null,
+  "_note": "Populated by Phase D /mart-dqc from dbt's target/run_results.json. Phase C scaffold leaves the file shape in place with empty results — Phase D fills it.",
+  "controls": {
+    "pk": {"planned": 3, "passed": 0, "failed": 0, "models": ["gme_ods_options_chain_snapshot", "gme_ods_price_history", "dim_date"]},
+    "fk": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
+    "freshness": {"planned": 2, "passed": 0, "failed": 0, "models": ["gme_ods_options_chain_snapshot", "gme_ods_price_history"]},
+    "volume": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_ods_options_chain_snapshot"]},
+    "ranges": {"planned": 2, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
+    "duplicates": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
+    "null_rate": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
+    "business_recon": {"planned": 7, "passed": 0, "failed": 0, "models": ["gme_dws_perf_max_pain", "gme_dws_perf_dealer_gamma_front_month", "gme_dws_perf_implied_vol", "gme_ads_market_dashboard"]}
+  },
+  "totals": {"planned": 18, "passed": 0, "failed": 0}
+}

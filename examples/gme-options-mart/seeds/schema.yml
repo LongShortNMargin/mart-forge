@@ -1,0 +1,43 @@
+version: 2
+
+seeds:
+  - name: dim_holidays_seed
+    description: "NYSE market holidays 2020-2027 (manually curated)."
+    config:
+      column_types:
+        holiday_date: date
+        holiday_name: varchar
+
+  - name: dim_macro_events_seed
+    description: "Manually curated FOMC / CPI / earnings event dates for the dim_date coverage window (2020-01-01 through 2027-12-31)."
+    config:
+      column_types:
+        event_date: date
+        event_type: varchar
+        event_label: varchar
+
+  - name: gme_seed_options_chain_snapshot
+    description: "Synthetic GME options chain snapshot for the canonical example."
+    config:
+      column_types:
+        trading_date: date
+        expiry_date: date
+        strike: double
+        option_type: varchar
+        open_interest: bigint
+        implied_volatility: double
+        provider: varchar
+        pull_ts_utc: timestamp
+
+  - name: gme_seed_price_history
+    description: "Synthetic GME end-of-day price history (60 trading days ending 2026-06-02)."
+    config:
+      column_types:
+        trading_date: date
+        open_px: double
+        high_px: double
+        low_px: double
+        close_px: double
+        volume: bigint
+        provider: varchar
+        pull_ts_utc: timestamp

@@ -13,7 +13,8 @@ prefix: gme
 # state). TC-17 fixture extended 252 → 400 days so future drift is
 # detectable. Phase C scaffold (/mart-bootstrap) begins from this
 # signed TDD.
-phase: B_signed
+phase: C_scaffold_generated
+scaffold_generated_at: 2026-06-02T03:50:00Z
 
 # Artifact paths (relative to this mart root, i.e. examples/gme-options-mart/).
 source_catalog_path: docs/source_catalog.json

@@ -1,0 +1,31 @@
+name: gme_options_mart
+version: "0.1.0"
+config-version: 2
+
+profile: gme_options_mart
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  gme_options_mart:
+    ods:
+      +materialized: incremental
+      +incremental_strategy: delete+insert
+    dim:
+      +materialized: table
+    dwd:
+      +materialized: table
+    dws:
+      +materialized: table
+    ads:
+      +materialized: view
+
+vars:
+  risk_free_rate: 0.045

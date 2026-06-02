@@ -1,18 +1,474 @@
 {
   "schema_version": "1.0",
   "mart": "gme-options-mart",
-  "phase": "C_complete",
-  "generated_at": null,
-  "_note": "Populated by Phase D /mart-dqc from dbt's target/run_results.json. Phase C scaffold leaves the file shape in place with empty results — Phase D fills it.",
-  "controls": {
-    "pk": {"planned": 3, "passed": 0, "failed": 0, "models": ["gme_ods_options_chain_snapshot", "gme_ods_price_history", "dim_date"]},
-    "fk": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
-    "freshness": {"planned": 2, "passed": 0, "failed": 0, "models": ["gme_ods_options_chain_snapshot", "gme_ods_price_history"]},
-    "volume": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_ods_options_chain_snapshot"]},
-    "ranges": {"planned": 2, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
-    "duplicates": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
-    "null_rate": {"planned": 1, "passed": 0, "failed": 0, "models": ["gme_dwd_options_chain"]},
-    "business_recon": {"planned": 7, "passed": 0, "failed": 0, "models": ["gme_dws_perf_max_pain", "gme_dws_perf_dealer_gamma_front_month", "gme_dws_perf_implied_vol", "gme_ads_market_dashboard"]}
+  "phase": "D_dqc_complete",
+  "generated_at": "2026-06-02T04:47:49Z",
+  "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+  "controls": [
+    {
+      "id": "pk_integrity_ods_chain_snapshot",
+      "control_class": "PK Integrity",
+      "table": "gme_ods_options_chain_snapshot",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_ods_options_chain_snapshot_trading_date",
+        "not_null_gme_ods_options_chain_snapshot_expiry_date",
+        "not_null_gme_ods_options_chain_snapshot_strike",
+        "not_null_gme_ods_options_chain_snapshot_option_type",
+        "pk_chain_snapshot_compound_unique"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_ods_price_history",
+      "control_class": "PK Integrity",
+      "table": "gme_ods_price_history",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_ods_price_history_trading_date",
+        "unique_gme_ods_price_history_trading_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_dim_date",
+      "control_class": "PK Integrity",
+      "table": "dim_date",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_dim_date_date_sk",
+        "unique_dim_date_date_sk",
+        "not_null_dim_date_calendar_date",
+        "unique_dim_date_calendar_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_dim_holidays",
+      "control_class": "PK Integrity",
+      "table": "dim_holidays",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_dim_holidays_holiday_date",
+        "unique_dim_holidays_holiday_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_dwd_price_eod",
+      "control_class": "PK Integrity",
+      "table": "gme_dwd_price_eod",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dwd_price_eod_trading_date",
+        "unique_gme_dwd_price_eod_trading_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_dws_dealer_gamma",
+      "control_class": "PK Integrity",
+      "table": "gme_dws_perf_dealer_gamma",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dws_perf_dealer_gamma_trading_date",
+        "unique_gme_dws_perf_dealer_gamma_trading_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_dws_dealer_gamma_front_month",
+      "control_class": "PK Integrity",
+      "table": "gme_dws_perf_dealer_gamma_front_month",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dws_perf_dealer_gamma_front_month_trading_date",
+        "unique_gme_dws_perf_dealer_gamma_front_month_trading_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "pk_integrity_dws_implied_vol",
+      "control_class": "PK Integrity",
+      "table": "gme_dws_perf_implied_vol",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dws_perf_implied_vol_trading_date",
+        "unique_gme_dws_perf_implied_vol_trading_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "fk_integrity_dwd_chain_date_sk",
+      "control_class": "FK Integrity",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "relationships_gme_dwd_options_chain_date_sk__date_sk__ref_dim_date_"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "fk_integrity_dwd_chain_expiry_date_sk",
+      "control_class": "FK Integrity",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "relationships_gme_dwd_options_chain_expiry_date_sk__date_sk__ref_dim_date_"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "freshness_ods_chain",
+      "control_class": "Freshness",
+      "table": "gme_ods_options_chain_snapshot",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "freshness_chain"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "freshness_ods_price_history",
+      "control_class": "Freshness",
+      "table": "gme_ods_price_history",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "freshness_price"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "freshness_ads_dashboard",
+      "control_class": "Freshness",
+      "table": "gme_ads_market_dashboard",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "is_stale_freshness_contract"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "volume_ods_chain",
+      "control_class": "Completeness / Volume",
+      "table": "gme_ods_options_chain_snapshot",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "volume_chain"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_range_dwd_chain_open_interest",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_range_open_interest",
+        "not_null_gme_dwd_options_chain_open_interest"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_range_dwd_chain_implied_volatility",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_range_implied_volatility"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_dwd_chain_option_type",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_dwd_options_chain_option_type__call__put",
+        "not_null_gme_dwd_options_chain_option_type"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_dwd_greeks_sign_dealer",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dwd_options_chain_greeks",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_dwd_options_chain_greeks_sign_dealer___1__1",
+        "not_null_gme_dwd_options_chain_greeks_sign_dealer"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_ods_chain_option_type",
+      "control_class": "Accepted Ranges",
+      "table": "gme_ods_options_chain_snapshot",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_ods_options_chain_snapshot_option_type__call__put"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_dws_dealer_gamma_scope_label",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dws_perf_dealer_gamma",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_dws_perf_dealer_gamma_scope_label__full_chain"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_dws_dealer_gamma_front_month_scope_label",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dws_perf_dealer_gamma_front_month",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_dws_perf_dealer_gamma_front_month_scope_label__front_month_only"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_dws_implied_vol_iv_rank_label",
+      "control_class": "Accepted Ranges",
+      "table": "gme_dws_perf_implied_vol",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_dws_perf_implied_vol_iv_rank_label__provisional__final"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_dim_macro_events_event_type",
+      "control_class": "Accepted Ranges",
+      "table": "dim_macro_events",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_dim_macro_events_event_type__FOMC__CPI__EARNINGS",
+        "not_null_dim_macro_events_event_type",
+        "not_null_dim_macro_events_event_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "accepted_values_ads_iv_rank_link_status_active",
+      "control_class": "Accepted Ranges",
+      "table": "gme_ads_market_dashboard",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "accepted_values_gme_ads_market_dashboard_iv_rank_link_status_active__unsupported__proxy"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "duplicate_detection_dwd_chain",
+      "control_class": "Duplicate Detection",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "dwd_chain_no_dupes"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "null_rate_dwd_chain_required",
+      "control_class": "Null-Rate Threshold",
+      "table": "gme_dwd_options_chain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dwd_options_chain_trading_date",
+        "not_null_gme_dwd_options_chain_option_type",
+        "not_null_gme_dwd_options_chain_open_interest"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "null_rate_dwd_greeks_required",
+      "control_class": "Null-Rate Threshold",
+      "table": "gme_dwd_options_chain_greeks",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dwd_options_chain_greeks_trading_date",
+        "not_null_gme_dwd_options_chain_greeks_sign_dealer"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "null_rate_dws_max_pain_strike",
+      "control_class": "Null-Rate Threshold",
+      "table": "gme_dws_perf_max_pain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_dws_perf_max_pain_max_pain_strike"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "null_rate_ads_trading_date",
+      "control_class": "Null-Rate Threshold",
+      "table": "gme_ads_market_dashboard",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "not_null_gme_ads_market_dashboard_trading_date"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_max_pain_in_strike_set",
+      "control_class": "Business Reconciliation",
+      "table": "gme_dws_perf_max_pain",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "max_pain_in_strike_set",
+        "max_pain_fixture_asymmetric_chain"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_dealer_net_gamma_neq_net_gex",
+      "control_class": "Business Reconciliation",
+      "table": "gme_dws_perf_dealer_gamma_front_month",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "dealer_net_gamma_neq_net_gex"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_dealer_net_gamma_scope_distinct",
+      "control_class": "Business Reconciliation",
+      "table": "gme_dws_perf_dealer_gamma_front_month",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "dealer_net_gamma_scope_distinct"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_iv_rank_label_final",
+      "control_class": "Business Reconciliation",
+      "table": "gme_dws_perf_implied_vol",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "iv_rank_implies_label_final",
+        "iv_rank_fixture_synthetic_400d"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_gex_zero_cross_in_strike_set",
+      "control_class": "Business Reconciliation",
+      "table": "gme_dws_perf_dealer_gamma_front_month",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "gex_zero_cross_in_strike_set"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_iv_rank_link_status_active_lifecycle",
+      "control_class": "Business Reconciliation",
+      "table": "gme_ads_market_dashboard",
+      "status": "pass",
+      "linked_dbt_tests": [
+        "iv_rank_lifecycle_predicate"
+      ],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": null,
+      "attempts": []
+    },
+    {
+      "id": "business_recon_t1_6b_rate_floor",
+      "control_class": "Business Reconciliation",
+      "table": "gme_dws_perf_dealer_gamma",
+      "status": "not_applicable",
+      "linked_dbt_tests": [],
+      "last_dbt_run": "2026-06-02T04:47:41.898283Z",
+      "rationale": "T1.6b parametric rate-sensitivity test (TDD \u00a7T-18 row business_recon_t1_6b_floor / \u00a7T-19 TC-14) is a Python test exercising the producer formula across r \u2208 {0.03, 0.045, 0.06} with a $1e6 denominator floor. It is not expressible as a single dbt test against the warehouse output (which is pinned to r=0.045 in dbt vars), and is therefore tracked as a CI-side check executed alongside dbt. See examples/gme-options-mart/tests/test_net_gex_rate_sensitivity.py follow-up tracked under Phase D OQ-2 (Fred 3M T-bill ingest) \u2014 the Python harness will land in the same dispatch.",
+      "attempts": []
+    }
+  ],
+  "summary": {
+    "pass_count": 35,
+    "warn_count": 0,
+    "error_count": 0,
+    "not_applicable_count": 1,
+    "pending_count": 0
   },
-  "totals": {"planned": 18, "passed": 0, "failed": 0}
+  "totals": {
+    "planned": 36,
+    "passed": 35,
+    "failed": 0
+  }
 }

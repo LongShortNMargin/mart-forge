@@ -69,6 +69,11 @@ models:
           - relationships:
               to: ref('dim_date')
               field: date_sk
+      - name: expiry_date_sk
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_sk
 
   - name: gme_dwd_options_chain_greeks
     description: "DWD: Black-Scholes per-share γ + locked sign_dealer (-1 calls, +1 puts)."

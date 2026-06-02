@@ -4,18 +4,26 @@ mart_name: gme-options-mart
 prefix: gme
 
 # Phase tracking — updated by skills as they run.
-# Phase C signed per orchestrator directive dd0fca3e + reviewer 33cc262a
-# (Phase C.5 round-2 approve-on-one-mechanical-fix). Round-3 patch:
-# gme_ads_market_dashboard latest_date CTE now gates on
-# pull_ts_utc <= now() in both joined sides so future-dated TC-16/TC-17
-# fixture rows (2098-2099) cannot be selected as the dashboard's
-# "latest" trading date. TDD §T-14 trading_date row updated to match.
-# All other C.5 round-2 findings (F1, F2, F3, M4, M5, M6) already
-# structurally closed at 034bfc3. Phase D (/mart-dqc) begins from this
-# signed scaffold.
-phase: C_signed
+# Phase D /mart-dqc audit complete per orchestrator directive
+# `Phase C closed clean. Dispatching Phase D` (member comment dated
+# 2026-06-02T04:35Z). 8-control DQC audit on the signed C scaffold
+# (commit dfa31b6): 35 / 36 controls pass, 1 not_applicable (T1.6b
+# parametric rate-sensitivity — covered by CI-side Python test, not
+# expressible as a single dbt assertion; documented in business-
+# requirements.md §B-4 Phase D outcome + tracked under TDD T-21 / TL-2).
+# 10 new singular tests + 1 schema.yml relationships entry added to
+# close the 8-control gaps that existed at C_signed (PK compound
+# uniqueness on ODS chain, DWD chain duplicate detection, freshness on
+# chain + price + ADS, volume on chain, accepted_range on OI + IV, FK
+# on expiry_date_sk, iv_rank lifecycle predicate). All 57 dbt tests
+# (47 original + 9 new singular + 1 new schema.yml relationships)
+# pass against the local DuckDB fixture target. Phase E dashboard
+# (already scaffolded in Phase C) and Phase F TEST PLAN execution are
+# the next dispatches.
+phase: D_dqc_complete
 scaffold_generated_at: 2026-06-02T03:50:00Z
 c_signed_at: 2026-06-02T04:35:00Z
+d_complete_at: 2026-06-02T04:45:00Z
 
 # Artifact paths (relative to this mart root, i.e. examples/gme-options-mart/).
 source_catalog_path: docs/source_catalog.json

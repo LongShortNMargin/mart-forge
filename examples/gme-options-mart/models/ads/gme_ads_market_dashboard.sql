@@ -8,11 +8,20 @@
 -- This keeps pull_lag_hours in [0, ∞) — STALE fires once next-session-close passes
 -- without a fresh pull, instead of returning negative lag values pre-21:00 UTC.
 
+-- latest_date gates on pull_ts_utc <= now() so future-dated fixture rows
+-- (TC-16/TC-17 seeds anchored to 2098-2099) cannot be picked as the
+-- dashboard's "latest" trading date. Closes Phase C.5 round-2 finding 1
+-- (reviewer 33cc262a). A row whose pull_ts_utc is in the future is by
+-- definition not the latest real pull.
 with latest_date as (
     select max(p.trading_date) as trading_date
     from {{ ref('gme_dwd_price_eod') }} p
-    inner join (select distinct trading_date from {{ ref('gme_dwd_options_chain') }}) c
-        on p.trading_date = c.trading_date
+    inner join (
+        select distinct trading_date
+        from {{ ref('gme_dwd_options_chain') }}
+        where pull_ts_utc <= now()
+    ) c on p.trading_date = c.trading_date
+    where p.pull_ts_utc <= now()
 ),
 
 pc_ratio as (

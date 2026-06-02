@@ -46,6 +46,29 @@ with_cum as (
     from per_strike
 ),
 
+-- Closes Phase C.5 advisory 4 (M4): a bare `cum_gex = 0` no longer counts as a
+-- crossing on its own. We precompute per-row "effective sign" of cum_gex at the
+-- nearest non-zero look-behind / look-ahead, then register a candidate only when
+-- the effective signs on either side of an adjacent strike pair disagree. This
+-- implements the TDD T-13 step-4 reading "zero takes the sign of the next
+-- non-zero entry," and correctly rejects exact-zero touches that do not actually
+-- change running sign (e.g. cum_gex sequence [+5, 0, +7]).
+with_sign_ranges as (
+    select
+        *,
+        last_value(case when cum_gex != 0 then sign(cum_gex) end ignore nulls) over (
+            partition by trading_date
+            order by strike
+            rows between unbounded preceding and current row
+        ) as sign_at_or_before,
+        first_value(case when cum_gex != 0 then sign(cum_gex) end ignore nulls) over (
+            partition by trading_date
+            order by strike
+            rows between current row and unbounded following
+        ) as sign_at_or_after
+    from with_cum
+),
+
 adjacent as (
     select
         trading_date,
@@ -53,8 +76,13 @@ adjacent as (
         lag(strike)  over (partition by trading_date order by strike) as k_below,
         strike                                                          as k_above,
         lag(cum_gex) over (partition by trading_date order by strike) as cum_gex_below,
-        cum_gex                                                         as cum_gex_above
-    from with_cum
+        cum_gex                                                         as cum_gex_above,
+        -- Effective sign at k_below = the most recent non-zero sign at-or-before
+        -- the previous row (i.e. the lag of sign_at_or_before).
+        lag(sign_at_or_before) over (partition by trading_date order by strike) as sign_below_eff,
+        -- Effective sign at k_above = the first non-zero sign at-or-after this row.
+        sign_at_or_after as sign_above_eff
+    from with_sign_ranges
 ),
 
 candidates as (
@@ -73,12 +101,9 @@ candidates as (
         end as k_star
     from adjacent
     where k_below is not null
-      and (
-          (cum_gex_above > 0 and cum_gex_below < 0)
-       or (cum_gex_above < 0 and cum_gex_below > 0)
-       or cum_gex_above = 0
-       or cum_gex_below = 0
-      )
+      and sign_below_eff is not null
+      and sign_above_eff is not null
+      and sign_below_eff * sign_above_eff < 0
 ),
 
 ranked as (

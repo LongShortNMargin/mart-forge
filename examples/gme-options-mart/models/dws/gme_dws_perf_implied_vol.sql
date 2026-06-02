@@ -31,31 +31,40 @@ atm as (
     group by 1, 2, 3
 ),
 
-ranked_expiries as (
-    -- For each trading_date pick the expiry pair (T_near, T_far) bracketing 30/365.
-    select
-        trading_date,
-        expiry_date,
-        time_to_expiry_years as t_years,
-        iv_atm,
-        row_number() over (
-            partition by trading_date
-            order by case when time_to_expiry_years <= 30.0/365.0 then 0 else 1 end,
-                     abs(time_to_expiry_years - 30.0/365.0)
-        ) as rn
+-- Closes Phase C.5 finding 3: the prior `ranked_expiries` ROW_NUMBER ordered
+-- ALL near-side expiries (T <= 30/365) before ALL far-side. On a multi-weekly
+-- chain (3d/10d/17d/24d/31d/38d), rn=2 fell to another near-side expiry,
+-- forcing the interpolation to extrapolate. Splitting into separate near/far
+-- CTEs and FULL JOIN-ing pins (T_near, T_far) to the actual bracketing pair.
+near as (
+    select trading_date, time_to_expiry_years as t_years, iv_atm,
+           row_number() over (
+               partition by trading_date order by time_to_expiry_years desc
+           ) as rn
     from atm
     where iv_atm is not null
+      and time_to_expiry_years <= 30.0/365.0
+),
+
+far as (
+    select trading_date, time_to_expiry_years as t_years, iv_atm,
+           row_number() over (
+               partition by trading_date order by time_to_expiry_years asc
+           ) as rn
+    from atm
+    where iv_atm is not null
+      and time_to_expiry_years > 30.0/365.0
 ),
 
 near_far as (
     select
-        trading_date,
-        max(case when rn = 1 then t_years end)  as t_near,
-        max(case when rn = 1 then iv_atm end)   as iv_near,
-        max(case when rn = 2 then t_years end)  as t_far,
-        max(case when rn = 2 then iv_atm end)   as iv_far
-    from ranked_expiries
-    group by 1
+        coalesce(n.trading_date, f.trading_date) as trading_date,
+        n.t_years as t_near,
+        n.iv_atm  as iv_near,
+        f.t_years as t_far,
+        f.iv_atm  as iv_far
+    from (select * from near where rn = 1) n
+    full outer join (select * from far where rn = 1) f using (trading_date)
 ),
 
 iv30_per_date as (

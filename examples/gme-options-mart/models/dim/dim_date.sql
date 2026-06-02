@@ -1,10 +1,16 @@
--- dim_date covers 2020-01-01 → 2027-12-31. is_trading_day = Mon-Fri AND NOT in dim_holidays.
--- The dim_date OFFSET-251 lookup in gme_dws_perf_implied_vol relies on this table
--- to pin the iv_rank percentile window to exactly 252 prior trading days (BRD §B-3).
+-- dim_date covers 2020-01-01 → 2100-12-31. is_trading_day = Mon-Fri AND NOT in
+-- dim_holidays. The wide upper bound (2100) keeps the relationships test in
+-- schema.yml satisfied for the synthetic test fixtures planted at 2098-2099
+-- (TC-16, TC-17) which are intentionally placed far past the real-data range
+-- so steady-state queries against current dates never touch them.
+--
+-- The dim_date OFFSET-251 lookup in gme_dws_perf_implied_vol relies on this
+-- table to pin the iv_rank percentile window to exactly 252 prior trading days
+-- (BRD §B-3).
 
 with calendar as (
     select cast(d as date) as calendar_date
-    from unnest(generate_series(date '2020-01-01', date '2027-12-31', interval '1 day')) as t(d)
+    from unnest(generate_series(date '2020-01-01', date '2100-12-31', interval '1 day')) as t(d)
 ),
 
 holidays as (

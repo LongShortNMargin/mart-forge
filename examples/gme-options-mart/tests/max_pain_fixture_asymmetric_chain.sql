@@ -1,32 +1,24 @@
--- TC-16: asymmetric synthetic chain — 1,000 calls @ K_under=20, 1,000 puts @ K_under=30,
--- nothing else. Assert max_pain_strike ∈ [20, 30]. Closes Phase B.5 finding 1 (the round-1
--- swapped-terms formula would tie {20, 25, 30} at pain=0 and pick 20, FAILING this test).
+-- TC-16: asymmetric synthetic chain — 1,000 calls @ K=20 and 2,000 puts @ K=30
+-- at trading_date=2099-12-31 / expiry_date=2100-01-31. Fixture lives in
+-- seeds/test_fixtures/max_pain_asymmetric_chain.csv and is plumbed through the
+-- production ODS → DWD → DWS pipeline via gme_ods_options_chain_snapshot.
+--
+-- Correct ITM-dollar-pain formula:
+--   pain(K=20) = 1000 * max(0, 20-20) + 2000 * max(0, 30-20) = 20,000
+--   pain(K=30) = 1000 * max(0, 30-20) + 2000 * max(0, 30-30) = 10,000
+--   argmin ⇒ K=30.
+--
+-- Broken (round-1) swapped-roles formula:
+--   pain(K=20) = 1000 * max(0, 20-20) + 2000 * max(0, 20-30) = 0
+--   pain(K=30) = 1000 * max(0, 20-30) + 2000 * max(0, 30-30) = 0
+--   tied at 0 ⇒ tie-break picks K=20 (lower).
+--
+-- This test reads gme_dws_perf_max_pain. A regression in the formula
+-- (or in the per-side dedup that closes the cross-join cardinality bug) flips
+-- the answer away from 30.
 
-with chain as (
-    select 20.0 as strike, 'call' as option_type, 1000 as oi
-    union all select 30.0 as strike, 'put'  as option_type, 1000 as oi
-),
-universe as (
-    select distinct strike as candidate_k from chain
-),
-pain as (
-    select
-        u.candidate_k,
-        sum(case when c.option_type = 'call' then c.oi * greatest(0, u.candidate_k - c.strike) else 0 end)
-          + sum(case when c.option_type = 'put'  then c.oi * greatest(0, c.strike - u.candidate_k) else 0 end) as pain_value
-    from universe u
-    cross join chain c
-    group by 1
-),
-argmin as (
-    select candidate_k as max_pain_strike
-    from pain
-    where pain_value = (select min(pain_value) from pain)
-    order by candidate_k asc
-    limit 1
-)
-
--- Fail if max_pain_strike is outside the closed interval [20, 30].
-select max_pain_strike
-from argmin
-where max_pain_strike < 20.0 or max_pain_strike > 30.0
+select trading_date, expiry_date, max_pain_strike
+from {{ ref('gme_dws_perf_max_pain') }}
+where trading_date = cast('2099-12-31' as date)
+  and expiry_date  = cast('2100-01-31' as date)
+  and max_pain_strike is distinct from 30.0

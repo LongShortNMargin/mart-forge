@@ -76,6 +76,21 @@ class TestBannedCategories:
         violations = scan_directory(str(tmp_path))
         assert any(v.category == "secret" for v in violations)
 
+    def test_scanner_catches_slack_token(self, tmp_path: Path) -> None:
+        _write(tmp_path, "leaked.md", "token=xoxb-123456789012-abcdefghij\n")
+        violations = scan_directory(str(tmp_path))
+        assert any(v.category == "secret" for v in violations)
+
+    def test_scanner_catches_pem_private_key(self, tmp_path: Path) -> None:
+        _write(tmp_path, "leaked.md", "-----BEGIN RSA PRIVATE KEY-----\n")
+        violations = scan_directory(str(tmp_path))
+        assert any(v.category == "secret" for v in violations)
+
+    def test_scanner_catches_openai_key(self, tmp_path: Path) -> None:
+        _write(tmp_path, "leaked.md", "key=sk-abcdefghijklmnopqrstuvwx\n")
+        violations = scan_directory(str(tmp_path))
+        assert any(v.category == "secret" for v in violations)
+
 
 class TestRemediationHints:
     def test_every_violation_carries_remediation(self, tmp_path: Path) -> None:

@@ -20,10 +20,19 @@ Exit code 1 on any failure.
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List
+
+from scripts.shared import (
+    find_section,
+    is_placeholder,
+    is_template_path,
+    parse_first_table,
+    parse_tables,
+    report_lint_result,
+    row_to_dict,
+)
 
 REQUIRED_SECTIONS = ["B-1", "B-2", "B-3", "B-4"]
 REQUIRED_B3_COLUMNS = [
@@ -47,115 +56,6 @@ B4_UNSUPPORTED_REQUIRED_COLUMNS = [
 ]
 
 
-def is_template_path(filepath: Path) -> bool:
-    """Per reviewer finding #5, the legend/slash escape is allowed only
-    on template files. A real BRD living in `docs/marts/<mart>/` must
-    commit to a single canonical value per row.
-    """
-    name = filepath.name.lower()
-    parts = {p.lower() for p in filepath.parts}
-    return (
-        ".template." in name
-        or name.endswith(".template.md")
-        or "templates" in parts
-    )
-
-
-def _is_placeholder(value: str) -> bool:
-    """True for cells that are clearly placeholder content rather than
-    a stakeholder commitment. Used to ignore empty template rows when
-    deciding whether to enforce row-level invariants.
-    """
-    if not value:
-        return True
-    v = value.strip().lower()
-    if not v:
-        return True
-    placeholders = {
-        "todo",
-        "_todo_",
-        "_todo:_",
-        "tbd",
-        "_tbd_",
-        "n/a",
-        "—",
-        "-",
-    }
-    if v in placeholders:
-        return True
-    if v.startswith("_todo") or v.startswith("_example"):
-        return True
-    return False
-
-
-def find_section(text: str, marker: str) -> int:
-    """Return line number where section header appears, or -1."""
-    pattern = re.compile(rf"^##\s*{re.escape(marker)}\b", re.MULTILINE)
-    match = pattern.search(text)
-    if not match:
-        return -1
-    return text[: match.start()].count("\n") + 1
-
-
-def parse_table(text: str, section_marker: str) -> Tuple[List[str], List[List[str]]]:
-    """Find the first markdown table after the given section. Return
-    (headers, rows). Headers and rows are lists of trimmed cell strings.
-    """
-    return _parse_table_after(text, section_marker, table_index=0)
-
-
-def parse_tables(
-    text: str, section_marker: str
-) -> List[Tuple[List[str], List[List[str]]]]:
-    """Find every markdown table inside the given section."""
-    pattern = re.compile(rf"^##\s*{re.escape(section_marker)}\b", re.MULTILINE)
-    m = pattern.search(text)
-    if not m:
-        return []
-    rest = text[m.end():]
-    # Stop at the next `## ` header.
-    next_pattern = re.compile(r"^##\s", re.MULTILINE)
-    n = next_pattern.search(rest)
-    section_body = rest[: n.start() if n else len(rest)]
-
-    tables: List[Tuple[List[str], List[List[str]]]] = []
-    headers: List[str] = []
-    rows: List[List[str]] = []
-    in_table = False
-    for line in section_body.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("|") and stripped.endswith("|"):
-            cells = [c.strip() for c in stripped.strip("|").split("|")]
-            if not in_table:
-                headers = cells
-                rows = []
-                in_table = True
-            elif set("".join(cells).strip()) <= set("-:| "):
-                continue
-            else:
-                rows.append(cells)
-        elif in_table and not stripped:
-            tables.append((headers, rows))
-            headers, rows = [], []
-            in_table = False
-    if in_table and headers:
-        tables.append((headers, rows))
-    return tables
-
-
-def _parse_table_after(
-    text: str, section_marker: str, *, table_index: int
-) -> Tuple[List[str], List[List[str]]]:
-    tables = parse_tables(text, section_marker)
-    if table_index < len(tables):
-        return tables[table_index]
-    return [], []
-
-
-def _row_dict(headers: List[str], row: List[str]) -> Dict[str, str]:
-    return {h: (row[i] if i < len(row) else "") for i, h in enumerate(headers)}
-
-
 def _collect_unsupported_metrics(text: str) -> set[str]:
     """Walk every table inside §B-4 and collect metric_name values from
     any table that looks like the unsupported-metrics table (it carries
@@ -172,7 +72,7 @@ def _collect_unsupported_metrics(text: str) -> set[str]:
             if idx_name >= len(row):
                 continue
             name = row[idx_name].strip()
-            if name and not _is_placeholder(name):
+            if name and not is_placeholder(name):
                 unsupported.add(name.lower())
     return unsupported
 
@@ -194,7 +94,7 @@ def lint(filepath: Path) -> List[str]:
             )
 
     # Validate B-3 metric table.
-    headers, rows = parse_table(text, "B-3")
+    headers, rows = parse_first_table(text, "B-3")
     if not headers:
         errors.append(
             f"{filepath}: §B-3 metric table not found or empty\n"
@@ -217,8 +117,8 @@ def lint(filepath: Path) -> List[str]:
     # Per-row checks. Skip rows whose every cell is placeholder content
     # (templates carry one such row by design).
     for r_no, row in enumerate(rows, start=1):
-        row_map = _row_dict(headers, row)
-        if all(_is_placeholder(v) for v in row_map.values()):
+        row_map = row_to_dict(headers, row)
+        if all(is_placeholder(v) for v in row_map.values()):
             continue
 
         # link_status validation.
@@ -267,10 +167,10 @@ def lint(filepath: Path) -> List[str]:
         # table with exhaustion evidence.
         if not allow_legend:
             metric_name = row_map.get("metric_name", "").strip()
-            if metric_name and not _is_placeholder(metric_name):
+            if metric_name and not is_placeholder(metric_name):
                 binding_val = row_map.get(B3_BINDING_COLUMN, "").strip()
                 listed_unsupported = metric_name.lower() in unsupported_metrics
-                if _is_placeholder(binding_val) and not listed_unsupported:
+                if is_placeholder(binding_val) and not listed_unsupported:
                     errors.append(
                         f"{filepath}: §B-3 row {r_no} metric {metric_name!r} has "
                         f"no source binding (column {B3_BINDING_COLUMN!r} is "
@@ -298,10 +198,10 @@ def lint(filepath: Path) -> List[str]:
                 if name_idx >= len(row):
                     continue
                 name_val = row[name_idx].strip()
-                if not name_val or _is_placeholder(name_val):
+                if not name_val or is_placeholder(name_val):
                     continue
                 ev_val = row[ev_idx].strip() if ev_idx < len(row) else ""
-                if _is_placeholder(ev_val):
+                if is_placeholder(ev_val):
                     errors.append(
                         f"{filepath}: §B-4 unsupported metric {name_val!r} "
                         f"missing resource-exhaustion evidence.\n"
@@ -321,13 +221,7 @@ def main(argv: List[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     errors = lint(Path(args.filepath))
-    if errors:
-        print(f"BRD LINT FAILED — {len(errors)} error(s):\n")
-        for err in errors:
-            print(f"  {err}")
-        return 1
-    print(f"BRD lint passed: {args.filepath}")
-    return 0
+    return report_lint_result("BRD LINT", errors, context=args.filepath)
 
 
 if __name__ == "__main__":

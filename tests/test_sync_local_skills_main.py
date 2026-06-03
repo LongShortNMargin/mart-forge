@@ -116,7 +116,7 @@ class TestSyncEdgeCases:
     def test_missing_source_warns_and_skips(self, tmp_path: Path) -> None:
         manifest = _write_manifest(tmp_path, ["./skills/lifecycle/ghost"])
         result = sync(tmp_path, manifest)
-        assert result == 0
+        assert result == 1
 
     def test_wrong_symlink_refreshed(self, tmp_path: Path) -> None:
         manifest = _write_manifest(tmp_path, ["./skills/lifecycle/mart-brd"])
@@ -156,7 +156,7 @@ class TestSyncEdgeCases:
 
         with patch("scripts.sync_local_skills.os.symlink", side_effect=side_effect):
             result = sync(tmp_path, manifest)
-            assert result == 0
+            assert result == 1
 
     def test_stale_real_dir_not_in_skills_without_force(self, tmp_path: Path) -> None:
         manifest = _write_manifest(tmp_path, ["./skills/lifecycle/mart-brd"])

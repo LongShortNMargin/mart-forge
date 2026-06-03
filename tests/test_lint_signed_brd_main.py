@@ -1,5 +1,5 @@
 """Tests for scripts.lint_signed_brd — main(), discover_brds(), and
-is_signed / _is_placeholder_cell edge cases.
+is_signed / is_placeholder_cell edge cases.
 
 Extends the existing test_lint_signed.py with coverage for the CLI
 entry-point, auto-discovery, and tricky signing scenarios.
@@ -12,13 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts.lint_signed_brd import (
-    _is_placeholder_cell,
-    _is_template,
-    discover_brds,
-    is_signed,
-    main,
-)
+from scripts.lint_signed_brd import discover_brds, is_signed, main
+from scripts.shared import is_placeholder_cell, is_template_path
 
 
 SIGNED_BODY = textwrap.dedent(
@@ -52,25 +47,25 @@ class TestIsPlaceholderCell:
         ["", "  ", "___", "----", "TBD", "tbd", "TODO", "_TODO_", "—", "-"],
     )
     def test_placeholders(self, value: str) -> None:
-        assert _is_placeholder_cell(value) is True
+        assert is_placeholder_cell(value) is True
 
     @pytest.mark.parametrize(
         "value",
         ["Jane", "2026-06-01", "jroe", "Dr. Smith"],
     )
     def test_real_values(self, value: str) -> None:
-        assert _is_placeholder_cell(value) is False
+        assert is_placeholder_cell(value) is False
 
 
 class TestIsTemplate:
     def test_template_in_name(self) -> None:
-        assert _is_template(Path("foo.template.md")) is True
+        assert is_template_path(Path("foo.template.md")) is True
 
     def test_templates_in_path(self) -> None:
-        assert _is_template(Path("templates/brd.md")) is True
+        assert is_template_path(Path("templates/brd.md")) is True
 
     def test_normal_file(self) -> None:
-        assert _is_template(Path("docs/business-requirements.md")) is False
+        assert is_template_path(Path("docs/business-requirements.md")) is False
 
 
 class TestIsSignedEdgeCases:

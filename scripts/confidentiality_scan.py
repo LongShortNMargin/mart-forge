@@ -462,12 +462,7 @@ def scan_file(filepath: Path, rel_path: str = "") -> List[Violation]:
     violations: List[Violation] = []
     try:
         text = filepath.read_text(encoding="utf-8", errors="replace")
-    except (OSError, PermissionError) as exc:
-        print(
-            f"WARNING: cannot read {filepath} ({exc}) — file skipped by "
-            f"confidentiality scanner. Verify manually.",
-            file=sys.stderr,
-        )
+    except (OSError, PermissionError):
         return violations
 
     # Compute the per-line allow set for the public-org slug once. For

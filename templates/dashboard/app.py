@@ -67,10 +67,7 @@ def metric_with_badge(label: str, value: str, status: str) -> None:
 def coverage_badge() -> str:
     if not COVERAGE_MANIFEST.exists():
         return "Coverage manifest missing"
-    try:
-        cov = json.loads(COVERAGE_MANIFEST.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        return f"Coverage manifest unreadable: {exc}"
+    cov = json.loads(COVERAGE_MANIFEST.read_text())
     verified = cov.get("verified_count", 0)
     planned = cov.get("planned_count", 0)
     return f"Data Loaded {verified}/{planned} | DQC Verified {verified}/{planned}"
@@ -99,9 +96,6 @@ try:
     df = load_dashboard_table(ads_table)
 except duckdb.CatalogException:
     st.error(f"ADS table `{ads_table}` not found. Run `dbt build` first.")
-    st.stop()
-except Exception as exc:
-    st.error(f"Failed to load table `{ads_table}`: {type(exc).__name__}: {exc}")
     st.stop()
 
 # ---------------------------------------------------------------------------

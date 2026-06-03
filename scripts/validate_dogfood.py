@@ -152,7 +152,11 @@ def _git_ref_exists(repo_root: Path, ref: str) -> bool:
             timeout=5,
         )
         return result.returncode == 0
-    except (subprocess.SubprocessError, FileNotFoundError):
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        print(
+            f"WARNING: git ref check failed for {ref!r} ({type(exc).__name__}: {exc})",
+            file=sys.stderr,
+        )
         return False
 
 
@@ -222,7 +226,12 @@ def _commit_touches_path(repo_root: Path, sha: str, path: str) -> Optional[bool]
         if diff.returncode != 0:
             return None
         return bool(diff.stdout.strip())
-    except (subprocess.SubprocessError, FileNotFoundError):
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        print(
+            f"WARNING: git diff check failed for {sha!r} / {path!r} "
+            f"({type(exc).__name__}: {exc})",
+            file=sys.stderr,
+        )
         return None
 
 

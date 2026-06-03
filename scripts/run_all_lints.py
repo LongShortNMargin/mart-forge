@@ -118,7 +118,18 @@ def main(argv: List[str] | None = None) -> int:
     failures: List[str] = []
     for step in selected:
         print(f"\n=== {step.name} ===")
-        result = subprocess.run(step.cmd, cwd=repo_root)
+        try:
+            result = subprocess.run(step.cmd, cwd=repo_root)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(
+                f"\nERROR: step {step.name!r} could not be executed: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            failures.append(step.name)
+            if not args.continue_on_error:
+                return 1
+            continue
         if result.returncode != 0:
             failures.append(step.name)
             if not args.continue_on_error:

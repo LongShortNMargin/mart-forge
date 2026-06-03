@@ -98,6 +98,12 @@ def validate(manifest_path: Path, repo_root: Path) -> List[str]:
                 )
                 continue
             skill_path = (repo_root / skill_ref.lstrip("./")).resolve()
+            if not str(skill_path).startswith(str(repo_root.resolve())):
+                errors.append(
+                    f"{manifest_path}: plugin {pname!r} skill ref {skill_ref!r} "
+                    f"resolves outside the repository root (path traversal)"
+                )
+                continue
             if not skill_path.exists() or not skill_path.is_dir():
                 errors.append(
                     f"{manifest_path}: plugin {pname!r} skill path {skill_ref!r} "

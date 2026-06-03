@@ -44,13 +44,8 @@ def get_conn() -> duckdb.DuckDBPyConnection:
     return duckdb.connect(WAREHOUSE_PATH, read_only=True)
 
 
-_TABLE_NAME_RE = __import__("re").compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
 @st.cache_data(ttl=300)
 def load_dashboard_table(table_name: str) -> pd.DataFrame:
-    if not _TABLE_NAME_RE.match(table_name):
-        raise ValueError(f"Invalid table name: {table_name!r}")
     return get_conn().execute(f"SELECT * FROM {table_name}").df()
 
 

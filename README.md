@@ -3,7 +3,7 @@
 **Claude Code plugin pack for lifecycle-first Kimball data warehouses.**
 
 mart-forge is a marketplace plugin pack: four installable plugins covering
-the phased Kimball lifecycle (BRD → TDD → scaffold → DQC), Git workflow
+the phased Kimball lifecycle, splitted into industrial standard process through gated artifacts (Business Requirement Document (BRD) → Technical Design Document (TDD) → scaffold → Data Quality Check), Git workflow
 plumbing, a DuckDB / MotherDuck warehouse track, and a quality / signing
 gate layer. It is a peer to `AltimateAI/data-engineering-skills` — that
 pack focuses on dbt and Snowflake skill primitives; this pack covers the

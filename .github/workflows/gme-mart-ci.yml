@@ -43,6 +43,9 @@ jobs:
       - name: dbt deps
         run: dbt deps --target local || true
 
+      - name: Ensure DuckDB fixture directory exists
+        run: mkdir -p data/fixtures
+
       - name: dbt seed
         run: dbt seed --target local
 

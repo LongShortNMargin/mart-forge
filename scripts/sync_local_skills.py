@@ -145,19 +145,24 @@ def sync(
             shutil.rmtree(entry)
 
     # Create / refresh symlinks.
+    failed_skills: List[str] = []
     for name, rel in skills.items():
         link = target_dir / name
         source_abs = repo_root / rel
         if not source_abs.exists():
             print(f"WARN: manifest references missing skill source: {rel}")
+            failed_skills.append(name)
             continue
         link_target = _planned_link_target(repo_root, target_dir, rel)
         if link.is_symlink() or link.exists():
             try:
                 if link.is_symlink() and os.readlink(link) == link_target:
                     continue
-            except OSError:
-                pass
+            except OSError as exc:
+                print(
+                    f"WARNING: cannot read symlink {link} ({exc}); will recreate.",
+                    file=sys.stderr,
+                )
             if link.is_symlink():
                 link.unlink()
             elif link.is_dir():
@@ -167,6 +172,7 @@ def sync(
                         f"{link} — pass --force to overwrite. Skipping symlink for {name}.",
                         file=sys.stderr,
                     )
+                    failed_skills.append(name)
                     continue
                 print(
                     f"WARNING: --force enabled; removing real directory {link}.",
@@ -189,7 +195,16 @@ def sync(
                 f"existing entry aside. Skipping symlink for {name}.",
                 file=sys.stderr,
             )
+            failed_skills.append(name)
 
+    if failed_skills:
+        print(
+            f"Synced {len(skills) - len(failed_skills)}/{len(skills)} skill "
+            f"symlinks under {target_dir} ({len(failed_skills)} failed: "
+            f"{failed_skills}).",
+            file=sys.stderr,
+        )
+        return 1
     print(f"Synced {len(skills)} skill symlinks under {target_dir}.")
     return 0
 

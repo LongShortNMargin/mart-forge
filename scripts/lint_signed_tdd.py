@@ -20,26 +20,17 @@ import sys
 from pathlib import Path
 from typing import Iterable, List
 
-# Allow running the script directly via `python scripts/lint_signed_tdd.py`
-# without first running `pip install -e .`: prepend the repo root to
-# sys.path so the sibling `scripts/lint_signed_brd.py` is importable.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+from scripts.shared import is_template_path, report_lint_result
 
 # Reuse the BRD signing primitives; the signature shape is identical.
-from scripts.lint_signed_brd import (  # noqa: E402
-    _is_template,
-    is_signed,
-    lint_paths as _lint_paths_for_doctype,
-)
+from scripts.lint_signed_brd import is_signed
 
 
 def discover_tdds(root: Path) -> List[Path]:
     candidates: List[Path] = []
     for pattern in ("*tech-design*.md", "*tdd*.md", "*TDD*.md"):
         candidates.extend(root.rglob(pattern))
-    return [p for p in candidates if not _is_template(p)]
+    return [p for p in candidates if not is_template_path(p)]
 
 
 def lint_paths(paths: Iterable[Path]) -> List[str]:
@@ -48,7 +39,7 @@ def lint_paths(paths: Iterable[Path]) -> List[str]:
         if not p.exists():
             errors.append(f"{p}: file not found")
             continue
-        if _is_template(p):
+        if is_template_path(p):
             continue
         if not is_signed(p):
             errors.append(
@@ -94,15 +85,11 @@ def main(argv: List[str] | None = None) -> int:
         return 0
 
     errors = lint_paths(targets)
-    if errors:
-        print(
-            f"SIGNED-TDD LINT FAILED — {len(errors)} unsigned TDD(s) found:\n"
-        )
-        for err in errors:
-            print(f"  {err}")
-        return 1
-    print(f"Signed-TDD lint passed — {len(targets)} TDD(s) signed.")
-    return 0
+    return report_lint_result(
+        "SIGNED-TDD LINT",
+        errors,
+        context=f"{len(targets)} TDD(s) signed",
+    )
 
 
 if __name__ == "__main__":

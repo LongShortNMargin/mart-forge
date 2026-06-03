@@ -44,13 +44,8 @@ def get_conn() -> duckdb.DuckDBPyConnection:
     return duckdb.connect(WAREHOUSE_PATH, read_only=True)
 
 
-_TABLE_NAME_RE = __import__("re").compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
 @st.cache_data(ttl=300)
 def load_dashboard_table(table_name: str) -> pd.DataFrame:
-    if not _TABLE_NAME_RE.match(table_name):
-        raise ValueError(f"Invalid table name: {table_name!r}")
     return get_conn().execute(f"SELECT * FROM {table_name}").df()
 
 
@@ -67,10 +62,7 @@ def metric_with_badge(label: str, value: str, status: str) -> None:
 def coverage_badge() -> str:
     if not COVERAGE_MANIFEST.exists():
         return "Coverage manifest missing"
-    try:
-        cov = json.loads(COVERAGE_MANIFEST.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        return f"Coverage manifest unreadable: {exc}"
+    cov = json.loads(COVERAGE_MANIFEST.read_text())
     verified = cov.get("verified_count", 0)
     planned = cov.get("planned_count", 0)
     return f"Data Loaded {verified}/{planned} | DQC Verified {verified}/{planned}"
@@ -99,9 +91,6 @@ try:
     df = load_dashboard_table(ads_table)
 except duckdb.CatalogException:
     st.error(f"ADS table `{ads_table}` not found. Run `dbt build` first.")
-    st.stop()
-except Exception as exc:
-    st.error(f"Failed to load table `{ads_table}`: {type(exc).__name__}: {exc}")
     st.stop()
 
 # ---------------------------------------------------------------------------

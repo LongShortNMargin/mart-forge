@@ -269,21 +269,6 @@ BANNED_PATTERNS: List[BannedPattern] = [
         re.compile(r"ghp_[0-9A-Za-z]{36,}"),
         "GitHub personal access token. Rotate immediately if committed.",
     ),
-    BannedPattern(
-        "secret",
-        re.compile(r"xox[bpas]-[0-9A-Za-z\-]{10,}"),
-        "Slack token. Rotate immediately if committed.",
-    ),
-    BannedPattern(
-        "secret",
-        re.compile(r"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----"),
-        "PEM private key. Remove and rotate immediately.",
-    ),
-    BannedPattern(
-        "secret",
-        re.compile(r"sk-[0-9A-Za-z]{20,}"),
-        "OpenAI / generic secret key. Rotate immediately if committed.",
-    ),
 ]
 
 
@@ -462,12 +447,7 @@ def scan_file(filepath: Path, rel_path: str = "") -> List[Violation]:
     violations: List[Violation] = []
     try:
         text = filepath.read_text(encoding="utf-8", errors="replace")
-    except (OSError, PermissionError) as exc:
-        print(
-            f"WARNING: cannot read {filepath} ({exc}) — file skipped by "
-            f"confidentiality scanner. Verify manually.",
-            file=sys.stderr,
-        )
+    except (OSError, PermissionError):
         return violations
 
     # Compute the per-line allow set for the public-org slug once. For

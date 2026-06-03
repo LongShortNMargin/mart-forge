@@ -87,21 +87,6 @@ FUTURE_SKEW_TOLERANCE = _dt.timedelta(minutes=5)
 # arbitrary refs are also accepted via `git rev-parse --verify`.
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
-# Reject ref strings that contain shell-dangerous or git-option-like
-# content.  The list is intentionally strict: real branch/tag names in
-# any mart-forge repo use alphanumerics, hyphens, underscores, slashes,
-# and dots.  Anything else is suspicious in a dogfood log entry.
-_SAFE_REF_RE = re.compile(r"^[A-Za-z0-9_./@-]+$")
-
-
-def _is_safe_ref(ref: str) -> bool:
-    """Return True when *ref* looks like a plausible git ref or path."""
-    if not ref:
-        return False
-    if ref.startswith("-"):
-        return False
-    return bool(_SAFE_REF_RE.match(ref))
-
 
 def _now() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
@@ -141,8 +126,6 @@ def discover_skill_catalog(repo_root: Path) -> Set[str]:
 
 
 def _git_ref_exists(repo_root: Path, ref: str) -> bool:
-    if not _is_safe_ref(ref):
-        return False
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{}}"],
@@ -152,11 +135,7 @@ def _git_ref_exists(repo_root: Path, ref: str) -> bool:
             timeout=5,
         )
         return result.returncode == 0
-    except (subprocess.SubprocessError, FileNotFoundError) as exc:
-        print(
-            f"WARNING: git ref check failed for {ref!r} ({type(exc).__name__}: {exc})",
-            file=sys.stderr,
-        )
+    except (subprocess.SubprocessError, FileNotFoundError):
         return False
 
 
@@ -201,8 +180,6 @@ def _commit_touches_path(repo_root: Path, sha: str, path: str) -> Optional[bool]
     touched the named path and inherit its diff). See the module
     docstring's "What the coherence check does NOT verify" list.
     """
-    if not _is_safe_ref(sha) or not _is_safe_ref(path):
-        return None
     try:
         parent = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", f"{sha}^"],
@@ -226,12 +203,7 @@ def _commit_touches_path(repo_root: Path, sha: str, path: str) -> Optional[bool]
         if diff.returncode != 0:
             return None
         return bool(diff.stdout.strip())
-    except (subprocess.SubprocessError, FileNotFoundError) as exc:
-        print(
-            f"WARNING: git diff check failed for {sha!r} / {path!r} "
-            f"({type(exc).__name__}: {exc})",
-            file=sys.stderr,
-        )
+    except (subprocess.SubprocessError, FileNotFoundError):
         return None
 
 

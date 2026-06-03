@@ -1,0 +1,12 @@
+gme_options_mart:
+  target: motherduck
+  outputs:
+    motherduck:
+      type: duckdb
+      path: "md:gme_db?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
+      threads: 4
+
+    local:
+      type: duckdb
+      path: "{{ env_var('DBT_LOCAL_DUCKDB_PATH', 'data/fixtures/gme.duckdb') }}"
+      threads: 4

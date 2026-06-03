@@ -1,0 +1,311 @@
+{
+  "mart_name": "gme_options_mart",
+  "generated_at": "2026-06-01T23:30:00Z",
+  "phase": "A0_complete",
+  "iteration": "Phase A.5 round 2 — addresses reviewer findings 1-12 in comment 8bd7a35c. Sign convention is single-sourced; dealer_net_gamma is scope-distinct from net_gex (front-month-only vs full-chain); gamma_flip is renamed gex_zero_cross_strike so prose matches algorithm; iv_rank link_status is phase-gated; asset paths are concrete API endpoints.",
+  "dealer_assumption": {
+    "name": "standard_retail_flow",
+    "description": "Dealer is short customer call gamma and long customer put gamma. Black-Scholes gamma is positive for both call and put on the same (K, T, sigma). The dealer's gamma contribution from a customer position with open interest OI is therefore -gamma*OI for calls and +gamma*OI for puts.",
+    "implied_sign_function": {
+      "call": -1,
+      "put":  1
+    },
+    "rationale": "This is the convention used by SpotGamma, MenthorQ, and academic GEX literature (Hull 'Options, Futures, and Other Derivatives' ch. on dealer hedging). It is locked here so every downstream artifact (BRD glossary, BRD B-3 calculation, TEST_PLAN T1.6, dwd model, recompute test) sources the same sign from one place and cannot drift."
+  },
+  "notes": "Phase A0 — source-discovery output, iterated. All four enumerated providers remain public and free at the 5-point verification depth required by mart-forge/skills/lifecycle/source-discovery/SKILL.md. The yfinance Python wrapper is the consumer of two Yahoo Finance v7/v8 API endpoints; the concrete URLs appear in each binding's `asset` field per reviewer finding 10. Loop semantics that previously crowded the asset field have moved into each binding's `notes` field.",
+  "metrics": [
+    {
+      "metric_name": "spot",
+      "metric_definition": "Regular-session close of GME common stock in USD for the trading_date the mart used (sourced from Yahoo's chart endpoint OHLC at indices[0].close, not the quote header's 'Previous Close' field — see reviewer finding 9).",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v8/finance/chart/GME?interval=1d&range=5d",
+          "fields": ["chart.result[0].indicators.quote[0].close[i]", "chart.result[0].timestamp[i]"],
+          "source_type": "native",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "End-of-day on US market close (~21:00 UTC); the v8 chart endpoint stamps each bar with a UTC timestamp so the comparator can be aligned to the same trading_date the mart used (closes finding 9).",
+          "notes": "yfinance.Ticker('GME').history(period='5d', interval='1d') is the Python idiom that consumes this endpoint. We always read the most-recent fully-closed bar for the trading_date in question, not the partial intraday bar."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "max_pain",
+      "metric_definition": "Strike price at which the aggregate intrinsic dollar value of expiring call + put open interest is minimized for the nearest unexpired weekly expiry. Strikes must be deduplicated per side before summation (closes predecessor `bae4af2` cross-join cardinality defect — TEST PLAN T3.3).",
+      "expected_grain": "one row per (trading_date, expiry_date)",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v7/finance/options/GME?date=<unix_expiry_seconds>",
+          "fields": [
+            "optionChain.result[0].options[0].calls[i].strike",
+            "optionChain.result[0].options[0].calls[i].openInterest",
+            "optionChain.result[0].options[0].puts[i].strike",
+            "optionChain.result[0].options[0].puts[i].openInterest"
+          ],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "Intraday refresh by Yahoo; we pull EOD. One HTTP request per expiry_date.",
+          "notes": "Iterate over the set of unix-seconds expiries returned by https://query2.finance.yahoo.com/v7/finance/options/GME (the no-date variant returns expirationDates[]). Per expiry, K* = argmin over distinct call+put strikes of: Σ_calls OI*max(0, K_underlying - K) + Σ_puts OI*max(0, K - K_underlying). Deduplicate strikes per side before summation. Comparators: max-pain.com and ChartExchange (T1.2)."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "pc_ratio_oi",
+      "metric_definition": "Put-to-call open-interest ratio across the full GME options chain (all listed expiries combined) on the most recent trading day.",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v7/finance/options/GME?date=<unix_expiry_seconds>",
+          "fields": [
+            "optionChain.result[0].options[0].puts[i].openInterest",
+            "optionChain.result[0].options[0].calls[i].openInterest"
+          ],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD; one HTTP request per expiry in the chain.",
+          "notes": "Sum across all listed expiries: Σ(put_oi)/Σ(call_oi). Comparator: Barchart's 'OI Ratio' column on barchart.com/stocks/quotes/GME/put-call-ratios, 'All' (chain-wide) row, not the 5-day/20-day volume rows (closes reviewer finding 11)."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "iv30",
+      "metric_definition": "Open-interest-weighted at-the-money implied volatility, interpolated to a constant 30-calendar-day tenor by linear interpolation in TOTAL VARIANCE (sigma squared times t), expressed as an annualized decimal fraction.",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v7/finance/options/GME?date=<unix_expiry_seconds>",
+          "fields": [
+            "optionChain.result[0].options[0].calls[i].strike",
+            "optionChain.result[0].options[0].calls[i].impliedVolatility",
+            "optionChain.result[0].options[0].calls[i].openInterest",
+            "optionChain.result[0].options[0].puts[i].strike",
+            "optionChain.result[0].options[0].puts[i].impliedVolatility",
+            "optionChain.result[0].options[0].puts[i].openInterest"
+          ],
+          "source_type": "derived",
+          "link_status": "proxy",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD; one HTTP request per bracketing expiry (typically two).",
+          "notes": "Closes reviewer finding 5. Method (locked here and re-stated identically in TEST PLAN T1.4): (i) for each expiry, compute OI-weighted ATM IV across strikes K where |K/spot - 1| <= 0.05, using both call+put IVs; (ii) for the two bracketing expiries with t_near <= 30/365 < t_far, let v_near = iv_near^2 * t_near and v_far = iv_far^2 * t_far; (iii) interpolate v_30 = v_near + (v_far - v_near) * ((30/365 - t_near) / (t_far - t_near)); (iv) iv30 = sqrt(v_30 / (30/365)). link_status='proxy' because Market Chameleon's iv30 uses a vendor-specific surface fit we cannot reproduce exactly; ±5% tolerance acknowledges this. Comparator: marketchameleon.com/Overview/GME/, IV30 field at the page header."
+        }
+      ],
+      "exhaustion_log": [
+        "Considered Cboe DataShop for exchange IV — gated behind paid subscription, fails license check.",
+        "Considered Polygon.io free tier — does not include greeks/IV at no cost."
+      ]
+    },
+    {
+      "metric_name": "hv20",
+      "metric_definition": "Twenty-trading-day annualized realized (historical) volatility of GME daily log returns, expressed as an annualized decimal fraction.",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v8/finance/chart/GME?interval=1d&range=2mo",
+          "fields": ["chart.result[0].indicators.quote[0].close[i]", "chart.result[0].timestamp[i]"],
+          "source_type": "derived",
+          "link_status": "exact",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD.",
+          "notes": "stddev_samp(log(close_t / close_{t-1})) over trailing 20 trading days * sqrt(252). Comparator: Barchart 20-day HV at barchart.com/stocks/quotes/GME/price-history/historical."
+        }
+      ],
+      "exhaustion_log": []
+    },
+    {
+      "metric_name": "net_gex",
+      "metric_definition": "Dealer net gamma exposure across the FULL listed-options chain (all listed expiries), in USD per 1% move in spot. Sign convention is derived from the locked dealer_assumption above: sign_dealer(call) = -1, sign_dealer(put) = +1. Formula:\n\n    net_gex = Σ over all (K, T, type) of:\n        gamma(K, T, sigma, r) * OI * 100 * spot^2 * 0.01 * sign_dealer(type)\n\nA positive net_gex means dealers are net long gamma at the chain level (stabilizing flows); negative means net short gamma (destabilizing flows). The sign of the published number follows this convention by construction; the prior iteration's contradictory sign annotations are removed (closes reviewer finding 1).",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "high",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v7/finance/options/GME?date=<unix_expiry_seconds>",
+          "fields": [
+            "optionChain.result[0].options[0].calls[i].strike",
+            "optionChain.result[0].options[0].calls[i].openInterest",
+            "optionChain.result[0].options[0].calls[i].impliedVolatility",
+            "optionChain.result[0].options[0].puts[i].strike",
+            "optionChain.result[0].options[0].puts[i].openInterest",
+            "optionChain.result[0].options[0].puts[i].impliedVolatility"
+          ],
+          "source_type": "derived",
+          "link_status": "unsupported",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD; one HTTP request per expiry in the chain.",
+          "notes": "Scope: full chain (every listed expiry). gamma is recomputed from Black-Scholes with risk_free_rate=0.045 (Black-Scholes call/put gamma are equal for the same K, T, sigma). link_status='unsupported' because no free public comparator publishes a numerically-comparable chain-wide dealer Net GEX. Validated by TEST PLAN T1.6 (same-r parity recompute) AND T1.6b (parametric sensitivity test recomputing at r ∈ {0.03, 0.045, 0.06}, asserting (max-min)/|value| <= 1% — closes reviewer finding 4)."
+        }
+      ],
+      "exhaustion_log": [
+        "Considered SpotGamma / Tier1Alpha — paid only, fails license check.",
+        "Considered MenthorQ — paid only.",
+        "No free comparator publishes Net GEX in a numeric, scrapable form."
+      ]
+    },
+    {
+      "metric_name": "gex_zero_cross_strike",
+      "metric_definition": "Strike on the chain at which the running cumulative sum of per-strike GEX (evaluated at current spot s0, sorted ascending by strike) changes sign, for the front-month expiry. This is a STRIKE-AXIS diagnostic, NOT a spot-price root-find: the running cumulative is a function of the strike axis with per-strike GEX evaluated at the same s0. Renamed from the prior iteration's 'gamma_flip' to remove the misleading 'spot price flip' framing (closes reviewer finding 3). Dashboard tile label: 'Strike-axis GEX zero cross @ current spot'.",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "medium",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v7/finance/options/GME?date=<unix_front_expiry_seconds>",
+          "fields": [
+            "optionChain.result[0].options[0].calls[i].strike",
+            "optionChain.result[0].options[0].calls[i].openInterest",
+            "optionChain.result[0].options[0].calls[i].impliedVolatility",
+            "optionChain.result[0].options[0].puts[i].strike",
+            "optionChain.result[0].options[0].puts[i].openInterest",
+            "optionChain.result[0].options[0].puts[i].impliedVolatility"
+          ],
+          "source_type": "derived",
+          "link_status": "unsupported",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD; one HTTP request (front-month expiry only).",
+          "notes": "Scope: front-month expiry only. Algorithm: (1) compute per-strike GEX contribution at current spot s0 using the locked sign_dealer; (2) sort strikes ascending; (3) form running cumulative sum; (4) locate adjacent strikes (K_below, K_above) where the sign of the running sum changes; (5) linear-interpolate the crossing strike between them. Returns NULL if the cumulative sum has no sign change on the front expiry. link_status='unsupported' for the same reason as net_gex; validated by TEST PLAN T1.7 (±$0.50, front-month only — see reviewer findings 3 + 8)."
+        }
+      ],
+      "exhaustion_log": [
+        "Same exhaustion log as net_gex — no free comparator."
+      ]
+    },
+    {
+      "metric_name": "iv_rank",
+      "metric_definition": "Percentile of the current iv30 value within the trailing 252 trading-day distribution of iv30 (0-100 scale).",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "medium",
+      "source_bindings": [
+        {
+          "provider": "internal",
+          "asset": "gme_dws_perf_implied_vol.iv30 (rolling 252-trading-day window)",
+          "fields": ["iv30"],
+          "source_type": "derived",
+          "link_status_when_lookback_lt_252": "unsupported",
+          "link_status_when_lookback_ge_252": "proxy",
+          "link_status_active": "unsupported",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD; requires 252 prior daily iv30 observations to be non-null before validation against an external comparator becomes meaningful.",
+          "notes": "Closes reviewer finding 6. Phase-gated link_status: while iv_rank_lookback_days < 252 the metric is unsupported (cold-start, with BRD §B-4 L-3 evidence) and the dashboard renders the 'provisional' label; once iv_rank_lookback_days >= 252 the link_status flips to proxy against marketchameleon.com/Overview/GME/IV/ within ±5% and the dashboard renders the clickable comparator badge. The dashboard badge logic in TEST PLAN T4.3 follows."
+        }
+      ],
+      "exhaustion_log": [
+        "Cannot use 252-day backfill at first run because the historical iv30 series is derived from forward-looking implied-vol surfaces that the yfinance chart endpoint does not snapshot; we accumulate forward from day 0. This is the canonical IV-rank cold-start problem and is mitigated by the phase-gated link_status above (closes finding 6)."
+      ]
+    },
+    {
+      "metric_name": "dealer_net_gamma",
+      "metric_definition": "Dealer net gamma exposure aggregated across the FRONT-MONTH expiry only, in shares per 1% move in spot. Formula:\n\n    dealer_net_gamma = Σ over (K, type) for expiry = front_expiry_date of:\n        gamma(K, T_front, sigma, r) * OI * 100 * sign_dealer(type)\n\nDistinct from net_gex by TWO axes simultaneously: (a) SCOPE — dealer_net_gamma is front-month-only, net_gex is full-chain; (b) UNIT — dealer_net_gamma is in shares per 1% (no spot² · 0.01 factor), net_gex is in USD per 1%. The scope axis is the load-bearing distinction: even when normalised to the same unit, dealer_net_gamma ≠ net_gex / (spot² · 0.01) whenever back-month expiries carry non-zero OI (which is always true for GME). Closes reviewer finding 2.",
+      "expected_grain": "one row per trading_date",
+      "stakeholder_priority": "medium",
+      "source_bindings": [
+        {
+          "provider": "yfinance",
+          "asset": "https://query2.finance.yahoo.com/v7/finance/options/GME?date=<unix_front_expiry_seconds>",
+          "fields": [
+            "optionChain.result[0].options[0].calls[i].strike",
+            "optionChain.result[0].options[0].calls[i].openInterest",
+            "optionChain.result[0].options[0].calls[i].impliedVolatility",
+            "optionChain.result[0].options[0].puts[i].strike",
+            "optionChain.result[0].options[0].puts[i].openInterest",
+            "optionChain.result[0].options[0].puts[i].impliedVolatility"
+          ],
+          "source_type": "derived",
+          "link_status": "unsupported",
+          "verification": {
+            "availability": "pass",
+            "asset_identity": "pass",
+            "license": "pass",
+            "freshness": "pass",
+            "semantic_match": "pass"
+          },
+          "freshness_cadence": "EOD; one HTTP request (front-month expiry only).",
+          "notes": "Scope: front-month expiry only. Sign convention from the locked dealer_assumption. Per TEST PLAN T3.4 the structural distinction from net_gex is the front-month-only scope (verifiable by checking the model's source-row provenance), NOT a unit factor — the prior iteration's 'same as net_gex with one fewer dollarization factor' framing is removed (closes finding 2)."
+        }
+      ],
+      "exhaustion_log": [
+        "Same as net_gex — no free comparator."
+      ]
+    }
+  ],
+  "supporting_seeds": [
+    {
+      "seed_name": "dim_date",
+      "purpose": "Daily calendar covering 2020-01-01 through 2027-12-31 with is_trading_day, day_of_week, week_start, month_start flags.",
+      "source": "Generated; US trading calendar via pandas_market_calendars XNYS (NYSE)."
+    },
+    {
+      "seed_name": "dim_holidays",
+      "purpose": "US market holidays for the same window.",
+      "source": "pandas_market_calendars XNYS holidays() output, committed as CSV."
+    },
+    {
+      "seed_name": "dim_macro_events",
+      "purpose": "Manually curated FOMC + CPI + earnings event dates for the dim_date coverage window (2020-01-01 through 2027-12-31). Used for date-axis annotation in the dashboard.",
+      "source": "Hand-curated CSV. No PII, no operator data. (Phrasing aligned with reviewer finding 12.)"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+target/
+dbt_packages/
+logs/
+data/fixtures/*.duckdb
+data/fixtures/*.duckdb.wal
+__pycache__/
+*.pyc
+.user.yml
+profiles.yml

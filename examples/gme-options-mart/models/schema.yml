@@ -1,0 +1,139 @@
+version: 2
+
+models:
+  - name: gme_ods_options_chain_snapshot
+    description: "ODS: pass-through options chain snapshot (one row per (trading_date, expiry_date, strike, option_type)). Provenance columns retained."
+    columns:
+      - name: trading_date
+        tests: [not_null]
+      - name: expiry_date
+        tests: [not_null]
+      - name: strike
+        tests: [not_null]
+      - name: option_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['call', 'put']
+
+  - name: gme_ods_price_history
+    description: "ODS: GME EOD price history."
+    columns:
+      - name: trading_date
+        tests: [not_null, unique]
+      - name: close_px
+        tests: [not_null]
+
+  - name: dim_date
+    description: "Calendar dimension 2020-01-01 through 2027-12-31; is_trading_day = weekday AND NOT in dim_holidays."
+    columns:
+      - name: date_sk
+        tests: [not_null, unique]
+      - name: calendar_date
+        tests: [not_null, unique]
+      - name: is_trading_day
+        tests: [not_null]
+
+  - name: dim_holidays
+    description: "NYSE market holidays 2020-2027."
+    columns:
+      - name: holiday_date
+        tests: [not_null, unique]
+
+  - name: dim_macro_events
+    description: "Manually curated FOMC / CPI / earnings dates for the dim_date coverage window."
+    columns:
+      - name: event_date
+        tests: [not_null]
+      - name: event_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['FOMC', 'CPI', 'EARNINGS']
+
+  - name: gme_dwd_options_chain
+    description: "DWD: cleaned options chain with front_expiry_flag (nearest expiry STRICTLY AFTER trading_date)."
+    columns:
+      - name: trading_date
+        tests: [not_null]
+      - name: option_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['call', 'put']
+      - name: open_interest
+        tests:
+          - not_null
+      - name: date_sk
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_sk
+      - name: expiry_date_sk
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_sk
+
+  - name: gme_dwd_options_chain_greeks
+    description: "DWD: Black-Scholes per-share γ + locked sign_dealer (-1 calls, +1 puts)."
+    columns:
+      - name: trading_date
+        tests: [not_null]
+      - name: sign_dealer
+        tests:
+          - not_null
+          - accepted_values:
+              values: [-1, 1]
+
+  - name: gme_dwd_price_eod
+    description: "DWD: cleaned EOD price with log_return_1d."
+    columns:
+      - name: trading_date
+        tests: [not_null, unique]
+
+  - name: gme_dws_perf_max_pain
+    description: "Per-(trading_date, expiry_date) max-pain strike (ITM dollar pain; per-side dedup before cross-join)."
+    columns:
+      - name: max_pain_strike
+        tests: [not_null]
+
+  - name: gme_dws_perf_dealer_gamma
+    description: "Full-chain dealer net GEX in USD per 1%. scope_label='full_chain'."
+    columns:
+      - name: trading_date
+        tests: [not_null, unique]
+      - name: scope_label
+        tests:
+          - accepted_values:
+              values: ['full_chain']
+
+  - name: gme_dws_perf_dealer_gamma_front_month
+    description: "Front-month dealer net gamma in shares per 1%. scope_label='front_month_only'. Includes gex_zero_cross_strike."
+    columns:
+      - name: trading_date
+        tests: [not_null, unique]
+      - name: scope_label
+        tests:
+          - accepted_values:
+              values: ['front_month_only']
+
+  - name: gme_dws_perf_implied_vol
+    description: "iv30, hv20, iv_rank (chronological rolling 252-trading-day percentile)."
+    columns:
+      - name: trading_date
+        tests: [not_null, unique]
+      - name: iv_rank_label
+        tests:
+          - accepted_values:
+              values: ['provisional', 'final']
+
+  - name: gme_ads_market_dashboard
+    description: "Single-row presentation VIEW for the Streamlit dashboard. Re-evaluates freshness columns at every query."
+    columns:
+      - name: trading_date
+        tests: [not_null]
+      - name: iv_rank_link_status_active
+        tests:
+          - accepted_values:
+              values: ['unsupported', 'proxy']

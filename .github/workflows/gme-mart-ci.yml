@@ -1,0 +1,91 @@
+name: gme-mart-ci
+
+on:
+  push:
+    branches: [main, phase-g/cp1-gme-options-mart]
+    paths:
+      - "examples/gme-options-mart/**"
+      - ".github/workflows/gme-mart-ci.yml"
+  pull_request:
+    paths:
+      - "examples/gme-options-mart/**"
+      - ".github/workflows/gme-mart-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/gme-options-mart
+
+    env:
+      DBT_PROFILES_DIR: ./
+      DBT_LOCAL_DUCKDB_PATH: data/fixtures/gme.duckdb
+      MOTHERDUCK_TOKEN: ""  # CI runs in local-DuckDB mode by default; live mode opt-in via secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt-duckdb + pytest stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install "dbt-core>=1.11" "dbt-duckdb>=1.10" "duckdb>=1.0" "pandas>=2.0" "numpy>=1.24" "pytest>=8.0"
+
+      - name: Materialise profiles.yml from the committed template
+        run: cp profiles.yml.example profiles.yml
+
+      - name: dbt deps
+        run: dbt deps --target local || true
+
+      - name: Ensure DuckDB fixture directory exists
+        run: mkdir -p data/fixtures
+
+      - name: dbt seed
+        run: dbt seed --target local
+
+      - name: dbt run
+        run: dbt run --target local
+
+      - name: dbt test
+        run: dbt test --target local
+
+      - name: Python tests (TC-13 / TC-14 / TC-15)
+        working-directory: .
+        run: |
+          python3 -m pytest examples/gme-options-mart/tests -v --tb=short
+
+      - name: Dashboard smoke test (local fixture, headless)
+        run: |
+          pip install -r dashboard/requirements.txt
+          streamlit run dashboard/app.py \
+            --server.port 8503 --server.headless true \
+            --server.address 127.0.0.1 \
+            > /tmp/streamlit.log 2>&1 &
+          SL_PID=$!
+          # Wait up to 25 seconds for the server to come up.
+          for i in $(seq 1 25); do
+            if curl -sf http://127.0.0.1:8503/_stcore/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8503/_stcore/health
+          curl -sf http://127.0.0.1:8503/ -o /tmp/streamlit_root.html
+          kill "$SL_PID" 2>/dev/null || true
+
+      - name: Confidentiality scan (gme-options-mart subtree)
+        working-directory: .
+        run: python3 scripts/confidentiality_scan.py examples/gme-options-mart
+
+      - name: Dogfood log semantic validation
+        working-directory: .
+        run: |
+          python3 scripts/validate_dogfood.py \
+            examples/gme-options-mart/.skill-invocations.jsonl \
+            --require-non-empty --check-semantics --repo-root .

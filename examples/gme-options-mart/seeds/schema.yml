@@ -1,0 +1,82 @@
+version: 2
+
+seeds:
+  - name: dim_holidays_seed
+    description: "NYSE market holidays 2020-2027 (manually curated)."
+    config:
+      column_types:
+        holiday_date: date
+        holiday_name: varchar
+
+  - name: dim_macro_events_seed
+    description: "Manually curated FOMC / CPI / earnings event dates for the dim_date coverage window (2020-01-01 through 2027-12-31)."
+    config:
+      column_types:
+        event_date: date
+        event_type: varchar
+        event_label: varchar
+
+  - name: gme_seed_options_chain_snapshot
+    description: "Synthetic GME options chain snapshot for the canonical example."
+    config:
+      column_types:
+        trading_date: date
+        expiry_date: date
+        strike: double
+        option_type: varchar
+        open_interest: bigint
+        implied_volatility: double
+        provider: varchar
+        pull_ts_utc: timestamp
+
+  - name: gme_seed_price_history
+    description: "Synthetic GME end-of-day price history (60 trading days ending 2026-06-02)."
+    config:
+      column_types:
+        trading_date: date
+        open_px: double
+        high_px: double
+        low_px: double
+        close_px: double
+        volume: bigint
+        provider: varchar
+        pull_ts_utc: timestamp
+
+  - name: max_pain_asymmetric_chain
+    description: "TC-16 synthetic asymmetric chain. trading_date=2099-12-31 (out of any real-data range). 1000 calls @ K=20 + 2000 puts @ K=30. Correct max_pain ⇒ 30; broken (swapped K/K_under) ⇒ 20 via tie-break."
+    config:
+      column_types:
+        trading_date: date
+        expiry_date: date
+        strike: double
+        option_type: varchar
+        open_interest: bigint
+        implied_volatility: double
+        provider: varchar
+        pull_ts_utc: timestamp
+
+  - name: iv_rank_synthetic_400d_chain
+    description: "TC-17 synthetic options chain — 400 trading_dates starting 2098-01-01, ending 2099-02-04. Bimodal iv30 (0.5 for first 200 days; 0.3 for last 200 days). Distinguishes chronological percentile from percent_rank-by-magnitude."
+    config:
+      column_types:
+        trading_date: date
+        expiry_date: date
+        strike: double
+        option_type: varchar
+        open_interest: bigint
+        implied_volatility: double
+        provider: varchar
+        pull_ts_utc: timestamp
+
+  - name: iv_rank_synthetic_400d_price
+    description: "TC-17 synthetic price history matching iv_rank_synthetic_400d_chain dates (close_px=100 so K=100 chain is ATM)."
+    config:
+      column_types:
+        trading_date: date
+        open_px: double
+        high_px: double
+        low_px: double
+        close_px: double
+        volume: bigint
+        provider: varchar
+        pull_ts_utc: timestamp
